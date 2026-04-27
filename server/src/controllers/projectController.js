@@ -1,4 +1,5 @@
 import Project from "../models/Project.js";
+import { generateStubLayout } from "../services/stubGenerator.js";
 
 const sanitize = (project) => ({
   id: project._id,
@@ -86,6 +87,40 @@ export const deleteProject = async (req, res) => {
     res.json({ message: "Project deleted" });
   } catch (err) {
     console.error("Delete project error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// POST /api/projects/:id/generate — runs the stub generator for now
+export const generateLayout = async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    if (project.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (!project.brief?.rooms?.length) {
+      return res.status(400).json({ message: "Project has no rooms to generate" });
+    }
+
+    const layoutData = generateStubLayout(project.brief);
+
+    project.layout = {
+      generated: true,
+      generatedAt: new Date(),
+      generatedBy: layoutData.meta.generator,
+      plot: layoutData.plot,
+      rooms: layoutData.rooms,
+      walls: layoutData.walls,
+      openings: layoutData.openings,
+    };
+    project.status = "generated";
+    await project.save();
+
+    res.json({ project: sanitize(project) });
+  } catch (err) {
+    console.error("Generate layout error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

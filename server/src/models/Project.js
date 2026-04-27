@@ -59,11 +59,61 @@ const projectSchema = new mongoose.Schema(
 
     // The generated layout (filled in by ml-service later)
     layout: {
-      generated: { type: Boolean, default: false },
-      walls: { type: Array, default: [] },
-      rooms: { type: [roomSchema], default: [] },
-      generatedAt: { type: Date, default: null },
-    },
+  generated: { type: Boolean, default: false },
+  generatedAt: { type: Date, default: null },
+  generatedBy: { type: String, default: null },
+
+  plot: {
+    width: { type: Number, default: null },
+    length: { type: Number, default: null },
+  },
+
+  rooms: {
+    type: [
+      {
+        _id: false,
+        id: String,
+        type: String,
+        label: String,
+        x: Number,
+        y: Number,
+        width: Number,
+        height: Number,
+      },
+    ],
+    default: [],
+  },
+
+  walls: {
+    type: [
+      {
+        _id: false,
+        id: String,
+        x1: Number,
+        y1: Number,
+        x2: Number,
+        y2: Number,
+        thickness: Number,
+        kind: { type: String, enum: ["exterior", "interior"] },
+      },
+    ],
+    default: [],
+  },
+
+  openings: {
+    type: [
+      {
+        _id: false,
+        id: String,
+        wallId: String,
+        kind: { type: String, enum: ["door", "window"] },
+        offset: Number,
+        width: Number,
+      },
+    ],
+    default: [],
+  },
+},
 
     status: {
       type: String,

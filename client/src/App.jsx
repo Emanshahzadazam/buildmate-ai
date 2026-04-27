@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import NewProject from "./pages/NewProject";
+import Editor from "./pages/Editor";
 
 
 export default function App() {
@@ -26,14 +27,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-            <Route
-              path="/projects/new"
-              element={
-                <ProtectedRoute>
-                  <NewProject />
-                </ProtectedRoute>
-              }
-            />
+          <Route
+            path="/projects/new"
+            element={
+              <ProtectedRoute>
+                <NewProject />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="*"
             element={
@@ -41,6 +42,14 @@ export default function App() {
                 <h1 className="text-3xl font-bold text-slate-900">404</h1>
                 <p className="mt-2 text-slate-600">Page not found.</p>
               </div>
+            }
+          />
+          <Route
+            path="/projects/:id"
+            element={
+              <ProtectedRoute>
+                <Editor />
+              </ProtectedRoute>
             }
           />
         </Routes>
