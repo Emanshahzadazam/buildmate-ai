@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-// Sub-schema: a single room within a project's brief or layout
-const roomSchema = new mongoose.Schema(
+// Sub-schema: a room in the brief (what the user asked for)
+const briefRoomSchema = new mongoose.Schema(
   {
     type: {
       type: String,
@@ -19,11 +19,50 @@ const roomSchema = new mongoose.Schema(
       required: true,
     },
     count: { type: Number, default: 1, min: 1 },
-    // Position and size are filled in by the layout generator (later session)
-    x: { type: Number, default: null },
-    y: { type: Number, default: null },
-    width: { type: Number, default: null },
-    height: { type: Number, default: null },
+  },
+  { _id: false }
+);
+
+// Sub-schema: a room in the generated layout (with position and size)
+const layoutRoomSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    type: { type: String, required: true },
+    label: { type: String, required: true },
+    x: { type: Number, required: true },
+    y: { type: Number, required: true },
+    width: { type: Number, required: true },
+    height: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+// Sub-schema: a wall in the layout
+const wallSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    x1: { type: Number, required: true },
+    y1: { type: Number, required: true },
+    x2: { type: Number, required: true },
+    y2: { type: Number, required: true },
+    thickness: { type: Number, default: 0.15 },
+    kind: {
+      type: String,
+      enum: ["exterior", "interior"],
+      default: "interior",
+    },
+  },
+  { _id: false }
+);
+
+// Sub-schema: a door or window
+const openingSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    wallId: { type: String, required: true },
+    kind: { type: String, enum: ["door", "window"], required: true },
+    offset: { type: Number, required: true },
+    width: { type: Number, required: true },
   },
   { _id: false }
 );
@@ -34,7 +73,7 @@ const projectSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true, // we query by owner often
+      index: true,
     },
     name: {
       type: String,
@@ -44,76 +83,32 @@ const projectSchema = new mongoose.Schema(
     },
     description: { type: String, trim: true, maxlength: 500, default: "" },
 
-    // The brief — what the user asked for
     brief: {
       buildingType: {
         type: String,
         enum: ["house", "apartment", "office", "shop"],
         default: "house",
       },
-      plotWidth: { type: Number, required: true, min: 3, max: 200 }, // meters
-      plotLength: { type: Number, required: true, min: 3, max: 200 }, // meters
+      plotWidth: { type: Number, required: true, min: 3, max: 200 },
+      plotLength: { type: Number, required: true, min: 3, max: 200 },
       floors: { type: Number, default: 1, min: 1, max: 5 },
-      rooms: { type: [roomSchema], default: [] },
+      rooms: { type: [briefRoomSchema], default: [] },
     },
 
-    // The generated layout (filled in by ml-service later)
     layout: {
-  generated: { type: Boolean, default: false },
-  generatedAt: { type: Date, default: null },
-  generatedBy: { type: String, default: null },
+      generated: { type: Boolean, default: false },
+      generatedAt: { type: Date, default: null },
+      generatedBy: { type: String, default: null },
 
-  plot: {
-    width: { type: Number, default: null },
-    length: { type: Number, default: null },
-  },
-
-  rooms: {
-    type: [
-      {
-        _id: false,
-        id: String,
-        type: String,
-        label: String,
-        x: Number,
-        y: Number,
-        width: Number,
-        height: Number,
+      plot: {
+        width: { type: Number, default: null },
+        length: { type: Number, default: null },
       },
-    ],
-    default: [],
-  },
 
-  walls: {
-    type: [
-      {
-        _id: false,
-        id: String,
-        x1: Number,
-        y1: Number,
-        x2: Number,
-        y2: Number,
-        thickness: Number,
-        kind: { type: String, enum: ["exterior", "interior"] },
-      },
-    ],
-    default: [],
-  },
-
-  openings: {
-    type: [
-      {
-        _id: false,
-        id: String,
-        wallId: String,
-        kind: { type: String, enum: ["door", "window"] },
-        offset: Number,
-        width: Number,
-      },
-    ],
-    default: [],
-  },
-},
+      rooms: { type: [layoutRoomSchema], default: [] },
+      walls: { type: [wallSchema], default: [] },
+      openings: { type: [openingSchema], default: [] },
+    },
 
     status: {
       type: String,

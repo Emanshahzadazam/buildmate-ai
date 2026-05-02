@@ -1,3 +1,4 @@
+import FloorPlanCanvas from "../components/canvas/FloorPlanCanvas";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { projectsApi } from "../lib/projectsApi";
@@ -78,11 +79,10 @@ export default function Editor() {
           </p>
         </div>
         <span
-          className={`text-xs px-2 py-1 rounded-full ${
-            project.status === "draft"
-              ? "bg-slate-100 text-slate-600"
-              : "bg-brand-100 text-brand-700"
-          }`}
+          className={`text-xs px-2 py-1 rounded-full ${project.status === "draft"
+            ? "bg-slate-100 text-slate-600"
+            : "bg-brand-100 text-brand-700"
+            }`}
         >
           {project.status}
         </span>
@@ -135,8 +135,8 @@ export default function Editor() {
               {generating
                 ? "Generating..."
                 : project.layout?.generated
-                ? "Regenerate layout"
-                : "Generate layout"}
+                  ? "Regenerate layout"
+                  : "Generate layout"}
             </Button>
             {error && (
               <p className="mt-2 text-xs text-red-600">{error}</p>
@@ -145,18 +145,20 @@ export default function Editor() {
         </aside>
 
         {/* Center: Canvas placeholder */}
-        <section className="col-span-6 bg-white rounded-2xl border border-slate-200 min-h-[600px] flex items-center justify-center">
+        <section className="col-span-6 bg-white rounded-2xl border border-slate-200 min-h-[600px] overflow-hidden relative">
           {project.layout?.generated ? (
-            <LayoutPreview layout={project.layout} />
+            <FloorPlanCanvas layout={project.layout} />
           ) : (
-            <div className="text-center text-slate-400 px-6">
-              <div className="h-14 w-14 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl">
-                ▢
+            <div className="absolute inset-0 flex items-center justify-center text-slate-400 px-6">
+              <div className="text-center">
+                <div className="h-14 w-14 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl">
+                  ▢
+                </div>
+                <p className="font-medium text-slate-600">No layout yet</p>
+                <p className="text-sm mt-1">
+                  Click Generate layout to create a 2D plan.
+                </p>
               </div>
-              <p className="font-medium text-slate-600">No layout yet</p>
-              <p className="text-sm mt-1">
-                Click Generate layout to create a 2D plan.
-              </p>
             </div>
           )}
         </section>
@@ -177,31 +179,3 @@ export default function Editor() {
   );
 }
 
-// Temporary preview — shows the raw layout data as a list.
-// Real 2D canvas rendering comes next session.
-function LayoutPreview({ layout }) {
-  return (
-    <div className="w-full h-full p-6 overflow-auto">
-      <div className="text-xs text-slate-500 mb-2">
-        Layout preview · {layout.rooms.length} rooms · {layout.walls.length}{" "}
-        walls
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {layout.rooms.map((r) => (
-          <div
-            key={r.id}
-            className="rounded-lg border border-slate-200 p-2 text-xs"
-          >
-            <p className="font-medium text-slate-900">{r.label}</p>
-            <p className="text-slate-500">
-              {r.width.toFixed(2)} × {r.height.toFixed(2)} m
-            </p>
-            <p className="text-slate-400">
-              at ({r.x.toFixed(2)}, {r.y.toFixed(2)})
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
