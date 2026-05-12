@@ -1,16 +1,24 @@
+import { generateLayoutViaML } from "../services/mlClient.js";
 import Project from "../models/Project.js";
 import { generateStubLayout } from "../services/stubGenerator.js";
+import { estimateCost } from "../services/costEngine.js";
 
-const sanitize = (project) => ({
-  id: project._id,
-  name: project.name,
-  description: project.description,
-  brief: project.brief,
-  layout: project.layout,
-  status: project.status,
-  createdAt: project.createdAt,
-  updatedAt: project.updatedAt,
-});
+const sanitize = (project) => {
+  const obj = {
+    id: project._id,
+    name: project.name,
+    description: project.description,
+    brief: project.brief,
+    layout: project.layout,
+    status: project.status,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+  if (project.layout?.generated) {
+    obj.cost = estimateCost(project.layout);
+  }
+  return obj;
+};
 
 // GET /api/projects — list current user's projects
 export const listProjects = async (req, res) => {
@@ -30,12 +38,18 @@ export const createProject = async (req, res) => {
   try {
     const { name, description, brief } = req.body;
 
-    if (!name || !brief?.plotWidth || !brief?.plotLength) {
-      return res
-        .status(400)
-        .json({ message: "Name, plot width and plot length are required" });
+    // Basic validation
+    if (!name) {
+      return res.status(400).json({ message: "Project name is required" });
+    }
+    if (!brief?.plot?.frontWidth || !brief?.plot?.backWidth ||
+        !brief?.plot?.leftLength || !brief?.plot?.rightLength) {
+      return res.status(400).json({
+        message: "All four plot dimensions (front width, back width, left length, right length) are required",
+      });
     }
 
+    // Create with full brief — Mongoose will validate enums and ranges
     const project = await Project.create({
       owner: req.user._id,
       name,
@@ -53,13 +67,11 @@ export const createProject = async (req, res) => {
   }
 };
 
-// GET /api/projects/:id — fetch a single project (must be owner)
+// GET /api/projects/:id
 export const getProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    if (!project) {
-      return res.status(404).json({ message: "Project not found" });
-    }
+    if (!project) return res.status(404).json({ message: "Project not found" });
     if (project.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -77,9 +89,7 @@ export const getProject = async (req, res) => {
 export const deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    if (!project) {
-      return res.status(404).json({ message: "Project not found" });
-    }
+    if (!project) return res.status(404).json({ message: "Project not found" });
     if (project.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -91,7 +101,7 @@ export const deleteProject = async (req, res) => {
   }
 };
 
-// POST /api/projects/:id/generate — runs the stub generator for now
+// POST /api/projects/:id/generate
 export const generateLayout = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -104,7 +114,7 @@ export const generateLayout = async (req, res) => {
       return res.status(400).json({ message: "Project has no rooms to generate" });
     }
 
-    const layoutData = generateStubLayout(project.brief);
+    const layoutData = await generateLayoutViaML(project.brief);
 
     project.layout = {
       generated: true,
@@ -121,6 +131,6 @@ export const generateLayout = async (req, res) => {
     res.json({ project: sanitize(project) });
   } catch (err) {
     console.error("Generate layout error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message || "Server error" });
   }
 };
