@@ -1,3 +1,4 @@
+import CostPanel from "../components/editor/CostPanel";
 import FloorPlanCanvas from "../components/canvas/FloorPlanCanvas";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -164,16 +165,7 @@ export default function Editor() {
         </section>
 
         {/* Right: Cost panel placeholder */}
-        <aside className="col-span-3 bg-white rounded-2xl border border-slate-200 p-5">
-          <h2 className="font-semibold text-slate-900">Cost</h2>
-          <p className="text-xs text-slate-500">Estimate based on layout</p>
-
-          <div className="mt-5 text-center text-slate-400 py-12">
-            <p className="text-sm">
-              Cost panel<br />coming next session
-            </p>
-          </div>
-        </aside>
+        <CostPanel cost={project.cost} layoutGenerated={project.layout?.generated} />
       </div>
     </div>
   );

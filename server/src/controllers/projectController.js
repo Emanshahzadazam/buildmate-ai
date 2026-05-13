@@ -120,10 +120,12 @@ export const generateLayout = async (req, res) => {
       generated: true,
       generatedAt: new Date(),
       generatedBy: layoutData.meta.generator,
+      buildable: layoutData.buildable,
       plot: layoutData.plot,
       rooms: layoutData.rooms,
       walls: layoutData.walls,
       openings: layoutData.openings,
+      warnings: layoutData.warnings || [],
     };
     project.status = "generated";
     await project.save();

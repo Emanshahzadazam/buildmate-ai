@@ -3,217 +3,223 @@ import { useNavigate } from "react-router-dom";
 import { projectsApi } from "../lib/projectsApi";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import StepIndicator from "../components/wizard/StepIndicator";
+import Step1Plot from "../components/wizard/Step1Plot";
+import Step2Rooms from "../components/wizard/Step2Rooms";
 
-const ROOM_TYPES = [
-  { value: "bedroom", label: "Bedroom" },
-  { value: "bathroom", label: "Bathroom" },
-  { value: "kitchen", label: "Kitchen" },
-  { value: "living", label: "Living" },
-  { value: "dining", label: "Dining" },
-  { value: "study", label: "Study" },
-];
+const STEPS = ["Plot & Setbacks", "Rooms", "Style", "Technical"];
 
-const BUILDING_TYPES = [
-  { value: "house", label: "House" },
-  { value: "apartment", label: "Apartment" },
-  { value: "office", label: "Office" },
-  { value: "shop", label: "Shop" },
-];
+const initialForm = {
+  name: "",
+  description: "",
+  plot: {
+    frontWidth: "",
+    backWidth: "",
+    leftLength: "",
+    rightLength: "",
+    unit: "feet",
+  },
+  setbacks: { front: 4, back: 2, left: 1, right: 1 },
+  floors: 1,
+  roomCounts: {
+    bedroom: 2,
+    bathroom: 2,
+    kitchen: 1,
+    living: 1,
+    dining: 1,
+    drawing: 0,
+    study: 0,
+    store: 0,
+  },
+  bedroomSizes: ["master", "medium"],
+};
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [form, setForm] = useState(initialForm);
+  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    buildingType: "house",
-    plotWidth: "",
-    plotLength: "",
-    floors: 1,
-    rooms: ROOM_TYPES.reduce((acc, r) => ({ ...acc, [r.value]: 0 }), {}),
-  });
+  const validateStep1 = () => {
+    const e = {};
+    ["frontWidth", "backWidth", "leftLength", "rightLength"].forEach((k) => {
+      const v = Number(form.plot[k]);
+      if (!v || v < 3) e[k] = "Min 3";
+      if (v > 200) e[k] = "Max 200";
+    });
+    return e;
+  };
 
-  const set = (key, value) => setForm({ ...form, [key]: value });
+  const validateStep2 = () => {
+    const e = {};
+    const total = Object.values(form.roomCounts).reduce((s, n) => s + n, 0);
+    if (total === 0) e.rooms = "Add at least one room";
+    return e;
+  };
 
-  const setRoomCount = (type, value) =>
-    setForm({ ...form, rooms: { ...form.rooms, [type]: Math.max(0, value) } });
+  const goNext = () => {
+    let stepErrors = {};
+    if (currentStep === 1) stepErrors = validateStep1();
+    if (currentStep === 2) stepErrors = validateStep2();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+    if (Object.keys(stepErrors).length) {
+      setErrors(stepErrors);
+      return;
+    }
+    setErrors({});
+    if (currentStep < STEPS.length) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      handleSubmit();
+    }
+  };
 
-    if (!form.name.trim()) return setError("Project name is required");
-    if (!form.plotWidth || !form.plotLength)
-      return setError("Plot dimensions are required");
+  const goBack = () => {
+    setErrors({});
+    if (currentStep > 1) setCurrentStep(currentStep - 1);
+  };
 
-    const rooms = Object.entries(form.rooms)
-      .filter(([, count]) => count > 0)
-      .map(([type, count]) => ({ type, count }));
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
+      setSubmitError("Please give the project a name");
+      return;
+    }
 
-    if (rooms.length === 0) return setError("Add at least one room");
+    // Build the brief object matching backend schema
+    const rooms = [];
+    Object.entries(form.roomCounts).forEach(([type, count]) => {
+      if (count <= 0) return;
+      if (type === "bedroom") {
+        // Group bedrooms by size — backend BriefRoom has type+count+size
+        const grouped = {};
+        (form.bedroomSizes || []).slice(0, count).forEach((s) => {
+          grouped[s] = (grouped[s] || 0) + 1;
+        });
+        Object.entries(grouped).forEach(([size, cnt]) => {
+          rooms.push({ type: "bedroom", count: cnt, size });
+        });
+      } else {
+        rooms.push({ type, count });
+      }
+    });
+
+    const payload = {
+      name: form.name,
+      description: form.description,
+      brief: {
+        buildingType: "house",
+        plot: {
+          frontWidth: Number(form.plot.frontWidth),
+          backWidth: Number(form.plot.backWidth),
+          leftLength: Number(form.plot.leftLength),
+          rightLength: Number(form.plot.rightLength),
+          unit: form.plot.unit,
+        },
+        setbacks: {
+          front: Number(form.setbacks.front),
+          back: Number(form.setbacks.back),
+          left: Number(form.setbacks.left),
+          right: Number(form.setbacks.right),
+        },
+        floors: Number(form.floors),
+        rooms,
+        // Defaults for Step 3 & 4 (will be set in next session)
+        kitchenType: "closed",
+        drawingRoomType: form.roomCounts.drawing > 0 ? "closed" : "none",
+        hasStaircase: form.floors > 1,
+        staircaseType: form.floors > 1 ? "straight" : "none",
+        hasGarage: false,
+        hasStoreRoom: (form.roomCounts.store || 0) > 0,
+        connectivity: {
+          kitchenDining: "connected",
+          bathroom: "mixed",
+          drawingRoom: "connected-to-lounge",
+          bedroomNear: "any",
+        },
+        technical: {
+          floorHeight: 10,
+          wallThicknessExt: 9,
+          wallThicknessInt: 4.5,
+          columnGrid: "auto",
+        },
+      },
+    };
 
     setSubmitting(true);
+    setSubmitError("");
     try {
-      const project = await projectsApi.create({
-        name: form.name,
-        description: form.description,
-        brief: {
-          buildingType: form.buildingType,
-          plotWidth: Number(form.plotWidth),
-          plotLength: Number(form.plotLength),
-          floors: Number(form.floors),
-          rooms,
-        },
-      });
+      await projectsApi.create(payload);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create project");
+      setSubmitError(err.response?.data?.message || "Failed to create project");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const plotArea =
-    form.plotWidth && form.plotLength
-      ? (Number(form.plotWidth) * Number(form.plotLength)).toFixed(1)
-      : null;
-
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
+    <div className="max-w-4xl mx-auto px-6 py-12">
       <h1 className="text-3xl font-bold text-slate-900">New project</h1>
-      <p className="mt-1 text-slate-600">
-        Tell us about the building you want to design.
+      <p className="mt-1 text-slate-600 mb-8">
+        Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1]}
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-          <h2 className="font-semibold text-slate-900">Basics</h2>
-          <Input
-            label="Project name"
-            value={form.name}
-            onChange={(e) => set("name", e.target.value)}
-            placeholder="e.g. Main Street House"
-          />
-          <Input
-            label="Description (optional)"
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-            placeholder="A note for yourself"
-          />
+      <StepIndicator steps={STEPS} currentStep={currentStep} />
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Building type
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {BUILDING_TYPES.map((b) => (
-                <button
-                  key={b.value}
-                  type="button"
-                  onClick={() => set("buildingType", b.value)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.buildingType === b.value
-                      ? "bg-brand-500 text-white border-brand-500"
-                      : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  {b.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+      {/* Project name on every step */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
+        <Input
+          label="Project name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="e.g. Main Street House"
+        />
+      </div>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-          <h2 className="font-semibold text-slate-900">Plot &amp; floors</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Plot width (m)"
-              type="number"
-              min="3"
-              step="0.1"
-              value={form.plotWidth}
-              onChange={(e) => set("plotWidth", e.target.value)}
-              placeholder="7.6"
-            />
-            <Input
-              label="Plot length (m)"
-              type="number"
-              min="3"
-              step="0.1"
-              value={form.plotLength}
-              onChange={(e) => set("plotLength", e.target.value)}
-              placeholder="15.2"
-            />
-          </div>
-          {plotArea && (
-            <p className="text-sm text-slate-600">
-              Plot area: <span className="font-medium">{plotArea} m²</span>
+      {/* Current step */}
+      <div className="min-h-[400px]">
+        {currentStep === 1 && <Step1Plot form={form} setForm={setForm} errors={errors} />}
+        {currentStep === 2 && <Step2Rooms form={form} setForm={setForm} errors={errors} />}
+        {currentStep === 3 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-slate-700">
+            <p className="font-semibold mb-1">Step 3 — Style & Connectivity</p>
+            <p>Coming next session. For now, using sensible defaults.</p>
+            <p className="mt-3 text-xs text-slate-500">
+              Click <strong>Next</strong> to continue, or <strong>Back</strong> to revise.
             </p>
-          )}
-
-          <Input
-            label="Number of floors"
-            type="number"
-            min="1"
-            max="5"
-            value={form.floors}
-            onChange={(e) => set("floors", e.target.value)}
-          />
-        </section>
-
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-          <h2 className="font-semibold text-slate-900">Rooms</h2>
-          <p className="text-sm text-slate-600">How many of each?</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {ROOM_TYPES.map((r) => (
-              <div
-                key={r.value}
-                className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2"
-              >
-                <span className="text-sm text-slate-700">{r.label}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRoomCount(r.value, form.rooms[r.value] - 1)}
-                    className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 text-center font-medium text-slate-900">
-                    {form.rooms[r.value]}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setRoomCount(r.value, form.rooms[r.value] + 1)}
-                    className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
-        </section>
+        )}
+        {currentStep === 4 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-slate-700">
+            <p className="font-semibold mb-1">Step 4 — Technical & Review</p>
+            <p>Coming next session. For now, using sensible defaults.</p>
+            <p className="mt-3 text-xs text-slate-500">
+              Click <strong>Create project</strong> to save with current values.
+            </p>
+          </div>
+        )}
+      </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+      {submitError && (
+        <p className="mt-4 text-sm text-red-600">{submitError}</p>
+      )}
 
-        <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" disabled={submitting}>
-            {submitting ? "Creating..." : "Create project"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate("/dashboard")}
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
+      {/* Navigation */}
+      <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
+        <Button
+          variant="outline"
+          onClick={currentStep === 1 ? () => navigate("/dashboard") : goBack}
+        >
+          {currentStep === 1 ? "Cancel" : "← Back"}
+        </Button>
+        <Button variant="primary" onClick={goNext} disabled={submitting}>
+          {currentStep === STEPS.length
+            ? (submitting ? "Creating..." : "Create project")
+            : "Next →"}
+        </Button>
+      </div>
     </div>
   );
 }
