@@ -6,6 +6,8 @@ import Input from "../components/ui/Input";
 import StepIndicator from "../components/wizard/StepIndicator";
 import Step1Plot from "../components/wizard/Step1Plot";
 import Step2Rooms from "../components/wizard/Step2Rooms";
+import Step3Style from "../components/wizard/Step3Style";
+import Step4Technical from "../components/wizard/Step4Technical";
 
 const STEPS = ["Plot & Setbacks", "Rooms", "Style", "Technical"];
 
@@ -32,6 +34,23 @@ const initialForm = {
     store: 0,
   },
   bedroomSizes: ["master", "medium"],
+  kitchenType: "closed",
+  drawingRoomType: "closed",
+  staircaseType: "none",
+  hasGarage: false,
+  hasStoreRoom: false,
+  connectivity: {
+    kitchenDining: "connected",
+    bathroom: "mixed",
+    drawingRoom: "connected-to-lounge",
+    bedroomNear: "any",
+  },
+  technical: {
+    floorHeight: 10,
+    wallThicknessExt: 9,
+    wallThicknessInt: 4.5,
+    columnGrid: "auto",
+  },
 };
 
 export default function NewProject() {
@@ -63,7 +82,6 @@ export default function NewProject() {
     let stepErrors = {};
     if (currentStep === 1) stepErrors = validateStep1();
     if (currentStep === 2) stepErrors = validateStep2();
-
     if (Object.keys(stepErrors).length) {
       setErrors(stepErrors);
       return;
@@ -83,16 +101,26 @@ export default function NewProject() {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
-      setSubmitError("Please give the project a name");
+      setSubmitError("Project name is required");
       return;
     }
 
-    // Build the brief object matching backend schema
+    const fw = Number(form.plot.frontWidth);
+    const bw = Number(form.plot.backWidth);
+    const ll = Number(form.plot.leftLength);
+    const rl = Number(form.plot.rightLength);
+
+    if (!fw || !bw || !ll || !rl) {
+      setSubmitError("Please fill all plot dimensions in Step 1");
+      setCurrentStep(1);
+      return;
+    }
+
+    // Build rooms array
     const rooms = [];
     Object.entries(form.roomCounts).forEach(([type, count]) => {
       if (count <= 0) return;
       if (type === "bedroom") {
-        // Group bedrooms by size — backend BriefRoom has type+count+size
         const grouped = {};
         (form.bedroomSizes || []).slice(0, count).forEach((s) => {
           grouped[s] = (grouped[s] || 0) + 1;
@@ -106,44 +134,33 @@ export default function NewProject() {
     });
 
     const payload = {
-      name: form.name,
-      description: form.description,
+      name: form.name.trim(),
+      description: form.description || "",
       brief: {
         buildingType: "house",
         plot: {
-          frontWidth: Number(form.plot.frontWidth),
-          backWidth: Number(form.plot.backWidth),
-          leftLength: Number(form.plot.leftLength),
-          rightLength: Number(form.plot.rightLength),
+          frontWidth: fw,
+          backWidth: bw,
+          leftLength: ll,
+          rightLength: rl,
           unit: form.plot.unit,
         },
         setbacks: {
-          front: Number(form.setbacks.front),
-          back: Number(form.setbacks.back),
-          left: Number(form.setbacks.left),
-          right: Number(form.setbacks.right),
+          front: Number(form.setbacks.front) || 4,
+          back: Number(form.setbacks.back) || 2,
+          left: Number(form.setbacks.left) || 1,
+          right: Number(form.setbacks.right) || 1,
         },
-        floors: Number(form.floors),
+        floors: Number(form.floors) || 1,
         rooms,
-        // Defaults for Step 3 & 4 (will be set in next session)
-        kitchenType: "closed",
-        drawingRoomType: form.roomCounts.drawing > 0 ? "closed" : "none",
+        kitchenType: form.kitchenType,
+        drawingRoomType: form.drawingRoomType,
         hasStaircase: form.floors > 1,
-        staircaseType: form.floors > 1 ? "straight" : "none",
-        hasGarage: false,
-        hasStoreRoom: (form.roomCounts.store || 0) > 0,
-        connectivity: {
-          kitchenDining: "connected",
-          bathroom: "mixed",
-          drawingRoom: "connected-to-lounge",
-          bedroomNear: "any",
-        },
-        technical: {
-          floorHeight: 10,
-          wallThicknessExt: 9,
-          wallThicknessInt: 4.5,
-          columnGrid: "auto",
-        },
+        staircaseType: form.floors > 1 ? form.staircaseType : "none",
+        hasGarage: form.hasGarage,
+        hasStoreRoom: form.hasStoreRoom,
+        connectivity: form.connectivity,
+        technical: form.technical,
       },
     };
 
@@ -153,7 +170,9 @@ export default function NewProject() {
       await projectsApi.create(payload);
       navigate("/dashboard");
     } catch (err) {
-      setSubmitError(err.response?.data?.message || "Failed to create project");
+      setSubmitError(
+        err.response?.data?.message || "Failed to create project"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -163,7 +182,8 @@ export default function NewProject() {
     <div className="max-w-4xl mx-auto px-6 py-12">
       <h1 className="text-3xl font-bold text-slate-900">New project</h1>
       <p className="mt-1 text-slate-600 mb-8">
-        Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1]}
+        Step {currentStep} of {STEPS.length}:{" "}
+        {STEPS[currentStep - 1]}
       </p>
 
       <StepIndicator steps={STEPS} currentStep={currentStep} />
@@ -178,27 +198,19 @@ export default function NewProject() {
         />
       </div>
 
-      {/* Current step */}
+      {/* Step content */}
       <div className="min-h-[400px]">
-        {currentStep === 1 && <Step1Plot form={form} setForm={setForm} errors={errors} />}
-        {currentStep === 2 && <Step2Rooms form={form} setForm={setForm} errors={errors} />}
+        {currentStep === 1 && (
+          <Step1Plot form={form} setForm={setForm} errors={errors} />
+        )}
+        {currentStep === 2 && (
+          <Step2Rooms form={form} setForm={setForm} errors={errors} />
+        )}
         {currentStep === 3 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-slate-700">
-            <p className="font-semibold mb-1">Step 3 — Style & Connectivity</p>
-            <p>Coming next session. For now, using sensible defaults.</p>
-            <p className="mt-3 text-xs text-slate-500">
-              Click <strong>Next</strong> to continue, or <strong>Back</strong> to revise.
-            </p>
-          </div>
+          <Step3Style form={form} setForm={setForm} />
         )}
         {currentStep === 4 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-slate-700">
-            <p className="font-semibold mb-1">Step 4 — Technical & Review</p>
-            <p>Coming next session. For now, using sensible defaults.</p>
-            <p className="mt-3 text-xs text-slate-500">
-              Click <strong>Create project</strong> to save with current values.
-            </p>
-          </div>
+          <Step4Technical form={form} setForm={setForm} />
         )}
       </div>
 
@@ -210,13 +222,21 @@ export default function NewProject() {
       <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
         <Button
           variant="outline"
-          onClick={currentStep === 1 ? () => navigate("/dashboard") : goBack}
+          onClick={
+            currentStep === 1 ? () => navigate("/dashboard") : goBack
+          }
         >
           {currentStep === 1 ? "Cancel" : "← Back"}
         </Button>
-        <Button variant="primary" onClick={goNext} disabled={submitting}>
+        <Button
+          variant="primary"
+          onClick={goNext}
+          disabled={submitting}
+        >
           {currentStep === STEPS.length
-            ? (submitting ? "Creating..." : "Create project")
+            ? submitting
+              ? "Creating..."
+              : "Create project"
             : "Next →"}
         </Button>
       </div>

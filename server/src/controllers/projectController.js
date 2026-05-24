@@ -1,7 +1,7 @@
-import { generateLayoutViaML } from "../services/mlClient.js";
 import Project from "../models/Project.js";
-import { generateStubLayout } from "../services/stubGenerator.js";
+import { generateLayoutVariantsViaML } from "../services/mlClient.js";
 import { estimateCost } from "../services/costEngine.js";
+
 
 const sanitize = (project) => {
   const obj = {
@@ -109,28 +109,64 @@ export const generateLayout = async (req, res) => {
     if (project.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
-
     if (!project.brief?.rooms?.length) {
-      return res.status(400).json({ message: "Project has no rooms to generate" });
+      return res.status(400).json({ message: "No rooms defined" });
     }
 
-    const layoutData = await generateLayoutViaML(project.brief);
+    // Generate 3 layout variants from Python
+    const variants = await generateLayoutVariantsViaML(project.brief);
+    if (!variants || variants.length === 0) {
+      return res.status(500).json({ message: "No layouts generated" });
+    }
 
+    const active = variants[0];
+
+    // Save first variant as active layout
     project.layout = {
       generated: true,
       generatedAt: new Date(),
-      generatedBy: layoutData.meta.generator,
-      buildable: layoutData.buildable,
-      plot: layoutData.plot,
-      rooms: layoutData.rooms,
-      walls: layoutData.walls,
-      openings: layoutData.openings,
-      warnings: layoutData.warnings || [],
+      generatedBy: active.meta?.generator || "arch-v2",
+      buildable: active.buildable,
+      plot: active.plot,
+      rooms: active.rooms,
+      walls: active.walls,
+      openings: active.openings,
+      warnings: active.warnings || [],
     };
     project.status = "generated";
     await project.save();
 
-    res.json({ project: sanitize(project) });
+    // Build response with all variants
+    const result = {
+      id: project._id,
+      name: project.name,
+      description: project.description,
+      brief: project.brief,
+      layout: project.layout,
+      status: project.status,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    };
+
+    if (project.layout?.generated) {
+      result.cost = estimateCost(project.layout);
+    }
+
+    // Attach all 3 variants so frontend can show layout selector
+    result.layoutVariants = variants.map((v, i) => ({
+      index: i,
+      name: v.variantName || `Layout ${String.fromCharCode(65 + i)}`,
+      rooms: v.rooms,
+      walls: v.walls,
+      openings: v.openings,
+      buildable: v.buildable,
+      plot: v.plot,
+      meta: v.meta,
+      generated: true,
+      generatedBy: v.meta?.generator || "arch-v2",
+    }));
+
+    res.json({ project: result });
   } catch (err) {
     console.error("Generate layout error:", err);
     res.status(500).json({ message: err.message || "Server error" });
