@@ -1,48 +1,65 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.schemas.layout import GenerateRequest, GenerateResponse
-from app.generator.smart import generate_variants
 from typing import List
+from app.schemas.layout import Brief, LayoutResponse
+from app.generator.smart import generate_layout_variants, ArchitecturalLayoutGenerator
 
-app = FastAPI(title="BuildMate AI · ML Service", version="2.0.0")
+app = FastAPI(title="BuildMate AI - ML Service", version="2.0")
 
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000", "http://localhost:5173", "http://localhost:5174"],
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-
 @app.get("/health")
-async def health():
-    return {"status": "ok", "service": "buildmate-ml", "version": "2.0.0"}
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "BuildMate AI ML Service",
+        "version": "2.0"
+    }
 
+@app.post("/generate", response_model=LayoutResponse)
+async def generate_single_layout(brief: Brief):
+    """
+    Generate a single floor plan layout
+    """
+    try:
+        generator = ArchitecturalLayoutGenerator(brief.dict())
+        layout = generator.generate_layout()
+        
+        if layout['status'] == 'error':
+            raise HTTPException(status_code=400, detail=layout['message'])
+        
+        return LayoutResponse(**layout)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
 @app.post("/generate-variants")
-async def generate_layout_variants(req: GenerateRequest):
-    if not req.rooms:
-        raise HTTPException(status_code=400, detail="At least one room required")
+async def generate_layout_variants_endpoint(brief: Brief) -> List[LayoutResponse]:
+    """
+    Generate 3 layout variants (A, B, C)
+    All with same brief but different room arrangements
+    """
     try:
-        request_dict = req.model_dump(by_alias=False)
-        variants = generate_variants(request_dict)
-        return {"variants": variants, "count": len(variants)}
-    except Exception as exc:
-        import traceback
-        print("Layout generation error:")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(exc))
+        variants = generate_layout_variants(brief.dict())
+        
+        # Validate all variants
+        for v in variants:
+            if v['status'] == 'error':
+                raise HTTPException(status_code=400, detail=v['message'])
+        
+        return [LayoutResponse(**v) for v in variants]
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Variant generation failed: {str(e)}")
 
-
-# Keep old endpoint for backward compat
-@app.post("/generate", response_model=GenerateResponse)
-async def generate_single(req: GenerateRequest):
-    if not req.rooms:
-        raise HTTPException(status_code=400, detail="At least one room required")
-    try:
-        request_dict = req.model_dump(by_alias=False)
-        variants = generate_variants(request_dict)
-        return variants[0] if variants else {}
-    except Exception as exc:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(exc))
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
