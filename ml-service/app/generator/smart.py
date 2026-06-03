@@ -1,517 +1,273 @@
 """
-Professional Architectural Layout Generator
-Handles irregular plots with variable widths/lengths
-Generates real-world compliant residential floor plans
+Realistic Pakistani Residential Floor Plan Generator
 """
+import uuid
 
-import math
-from typing import List, Dict, Tuple
-from dataclasses import dataclass
-
-@dataclass
-class Point:
-    x: float
-    y: float
-
-@dataclass
-class Room:
-    name: str
-    x: float
-    y: float
-    width: float
-    height: float
-    room_type: str  # bedroom, bathroom, kitchen, drawing, dining, hall, garage
-    color: str
-
-@dataclass
-class Wall:
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-    thickness: float  # in feet
-    is_external: bool
-
-@dataclass
-class Opening:
-    x: float
-    y: float
-    width: float
-    height: float
-    opening_type: str  # door, window
-    direction: str  # N, S, E, W
-
-
-class ArchitecturalLayoutGenerator:
-    """
-    Generates professional floor plans based on:
-    - Real Pakistani residential standards
-    - Proper room proportions
-    - Fixture placement rules
-    - Wall thickness differentiation
-    - Traffic flow optimization
-    """
-    
-    # Room dimension standards (in feet) - min x min
-    ROOM_STANDARDS = {
-        'master_bedroom': (16, 14),
-        'bedroom': (12, 13),
-        'small_bedroom': (10, 10),
-        'bathroom': (5, 7),
-        'toilet': (4, 5),
-        'kitchen': (12, 14),
-        'dining': (12, 12),
-        'drawing': (18, 16),
-        'living': (16, 14),
-        'hall': (14, 12),
-        'garage': (18, 18),
-        'corridor': (4, None)  # width only, length varies
-    }
-    
-    # Wall thicknesses
-    WALL_EXTERNAL = 0.75  # 9 inches in feet
-    WALL_INTERNAL = 0.38  # 4.5 inches in feet
-    
-    # Minimum distances from plot edge (setback)
-    MIN_SETBACK = 5.0  # feet
-    
-    def __init__(self, brief: Dict):
-        """Initialize with user brief"""
-        self.brief = brief
-        self.plot = brief['plot']
-        self.rooms = []
-        self.walls = []
-        self.openings = []
-        self.warnings = []
+def generate_floor_plan(brief):
+    """Generate a single realistic floor plan"""
+    try:
+        plot = brief.get('plot', {})
+        setbacks = brief.get('setbacks', {})
+        rooms_brief = brief.get('rooms', [])
         
-    def calculate_plot_corners(self) -> List[Point]:
-        """
-        Convert plot dimensions to corner coordinates
-        Handles irregular plots (different left/right lengths, front/back widths)
-        """
-        front_width = self.plot['frontWidth']
-        back_width = self.plot['backWidth']
-        left_length = self.plot['leftLength']
-        right_length = self.plot['rightLength']
+        # Calculate buildable area
+        plot_width = (plot.get('frontWidth', 40) + plot.get('backWidth', 40)) / 2
+        plot_length = (plot.get('leftLength', 70) + plot.get('rightLength', 70)) / 2
         
-        # Origin at front-left corner
-        corners = [
-            Point(0, 0),                    # Front-left
-            Point(front_width, 0),          # Front-right
-            Point(back_width, max(left_length, right_length)),  # Back-right
-            Point(0, max(left_length, right_length))  # Back-left
-        ]
+        buildable_width = plot_width - setbacks.get('left', 1) - setbacks.get('right', 1)
+        buildable_length = plot_length - setbacks.get('front', 4) - setbacks.get('back', 2)
         
-        return corners
-    
-    def calculate_buildable_area(self, corners: List[Point]) -> Tuple[float, float, float, float]:
-        """
-        Calculate buildable area after applying setbacks
-        Returns: (min_x, min_y, max_x, max_y)
-        """
-        setback = self.brief['setbacks']
-        front_setback = setback.get('front', 5)
-        back_setback = setback.get('back', 5)
-        left_setback = setback.get('left', 5)
-        right_setback = setback.get('right', 5)
+        # Start position (after setbacks)
+        start_x = setbacks.get('left', 1)
+        start_y = setbacks.get('front', 4)
         
-        # Calculate average dimensions for irregular plots
-        plot_width_avg = (self.plot['frontWidth'] + self.plot['backWidth']) / 2
-        plot_length_avg = (self.plot['leftLength'] + self.plot['rightLength']) / 2
+        rooms = []
+        walls = []
+        openings = []
         
-        buildable = {
-            'min_x': left_setback,
-            'max_x': plot_width_avg - right_setback,
-            'min_y': front_setback,
-            'max_y': plot_length_avg - back_setback
-        }
+        # ZONE ALLOCATION
+        public_depth = buildable_length * 0.25
+        service_depth = buildable_length * 0.20
+        private_depth = buildable_length * 0.55
         
-        return buildable
-    
-    def allocate_zones(self, buildable: Dict) -> Dict:
-        """
-        Divide buildable area into zones:
-        - PUBLIC (front 25-30%): Garage, Living, Drawing
-        - SERVICE (middle 20-25%): Kitchen, Dining
-        - PRIVATE (back 45-50%): Bedrooms, Bathrooms
-        """
-        total_depth = buildable['max_y'] - buildable['min_y']
+        wall_thick_ext = 0.75
+        wall_thick_int = 0.375
         
-        public_depth = total_depth * 0.28  # Front 28%
-        service_depth = total_depth * 0.22  # Middle 22%
-        private_depth = total_depth * 0.50  # Back 50%
+        x_pos = start_x + wall_thick_ext
+        y_pos = start_y + wall_thick_ext
+        zone_width = buildable_width - 2 * wall_thick_ext
         
-        zones = {
-            'public': {
-                'x_min': buildable['min_x'],
-                'x_max': buildable['max_x'],
-                'y_min': buildable['min_y'],
-                'y_max': buildable['min_y'] + public_depth
-            },
-            'service': {
-                'x_min': buildable['min_x'],
-                'x_max': buildable['max_x'],
-                'y_min': buildable['min_y'] + public_depth,
-                'y_max': buildable['min_y'] + public_depth + service_depth
-            },
-            'private': {
-                'x_min': buildable['min_x'],
-                'x_max': buildable['max_x'],
-                'y_min': buildable['min_y'] + public_depth + service_depth,
-                'y_max': buildable['max_y']
-            }
-        }
+        # ===== PUBLIC ZONE =====
+        has_garage = brief.get('hasGarage', False)
         
-        return zones
-    
-    def generate_layout(self) -> Dict:
-        """Main generation function"""
-        try:
-            # Step 1: Calculate plot geometry
-            corners = self.calculate_plot_corners()
-            buildable = self.calculate_buildable_area(corners)
-            
-            # Validate buildable area
-            if buildable['max_x'] <= buildable['min_x'] or buildable['max_y'] <= buildable['min_y']:
-                return self.error_response("Plot too small or invalid setbacks")
-            
-            # Step 2: Allocate zones
-            zones = self.allocate_zones(buildable)
-            
-            # Step 3: Place rooms based on brief
-            self.place_rooms(zones, buildable)
-            
-            # Step 4: Generate walls
-            self.generate_walls(buildable, corners)
-            
-            # Step 5: Add openings (doors, windows)
-            self.add_openings()
-            
-            # Return layout JSON
-            return {
-                'status': 'success',
-                'plot': {
-                    'corners': [{'x': c.x, 'y': c.y} for c in corners],
-                    'frontWidth': self.plot['frontWidth'],
-                    'backWidth': self.plot['backWidth'],
-                    'leftLength': self.plot['leftLength'],
-                    'rightLength': self.plot['rightLength'],
-                    'unit': self.plot.get('unit', 'feet')
-                },
-                'buildable': {
-                    'min_x': buildable['min_x'],
-                    'max_x': buildable['max_x'],
-                    'min_y': buildable['min_y'],
-                    'max_y': buildable['max_y']
-                },
-                'zones': zones,
-                'rooms': [
-                    {
-                        'name': r.name,
-                        'type': r.room_type,
-                        'x': round(r.x, 2),
-                        'y': round(r.y, 2),
-                        'width': round(r.width, 2),
-                        'height': round(r.height, 2),
-                        'color': r.color,
-                        'area_sqft': round(r.width * r.height, 2)
-                    } for r in self.rooms
-                ],
-                'walls': [
-                    {
-                        'x1': round(w.x1, 2),
-                        'y1': round(w.y1, 2),
-                        'x2': round(w.x2, 2),
-                        'y2': round(w.y2, 2),
-                        'thickness': round(w.thickness, 2),
-                        'is_external': w.is_external,
-                        'type': 'external' if w.is_external else 'internal'
-                    } for w in self.walls
-                ],
-                'openings': [
-                    {
-                        'x': round(o.x, 2),
-                        'y': round(o.y, 2),
-                        'width': round(o.width, 2),
-                        'height': round(o.height, 2),
-                        'type': o.opening_type,
-                        'direction': o.direction
-                    } for o in self.openings
-                ],
-                'warnings': self.warnings,
-                'meta': {
-                    'total_area_sqft': round(
-                        (buildable['max_x'] - buildable['min_x']) * 
-                        (buildable['max_y'] - buildable['min_y']), 2
-                    ),
-                    'rooms_count': len(self.rooms),
-                    'generated_by': 'BuildMate AI v2.0'
-                }
-            }
-            
-        except Exception as e:
-            return self.error_response(f"Layout generation failed: {str(e)}")
-    
-    def place_rooms(self, zones: Dict, buildable: Dict):
-        """Place rooms in appropriate zones"""
-        zone_width = buildable['max_x'] - buildable['min_x']
-        
-        # Extract requirements from brief
-        bedroom_count = 0
-        for room in self.brief.get('rooms', []):
-            if room['type'] == 'bedroom':
-                bedroom_count = room['count']
-        
-        kitchen_type = self.brief.get('kitchenType', 'open')
-        drawing_type = self.brief.get('drawingRoomType', 'formal')
-        has_garage = self.brief.get('hasGarage', False)
-        
-        # ===== PUBLIC ZONE (Garage, Living, Drawing) =====
-        public = zones['public']
-        x_pos = public['x_min'] + self.WALL_EXTERNAL
-        y_pos = public['y_min'] + self.WALL_EXTERNAL
-        zone_height = public['y_max'] - public['y_min'] - 2*self.WALL_EXTERNAL
-        
-        # Left side: Garage or nothing
         if has_garage:
-            garage_w, garage_h = self.ROOM_STANDARDS['garage']
-            if garage_w <= zone_width / 2 - self.WALL_EXTERNAL:
-                self.rooms.append(Room(
-                    name='Garage',
-                    x=x_pos,
-                    y=y_pos,
-                    width=min(garage_w, zone_width/3 - self.WALL_EXTERNAL),
-                    height=min(garage_h, zone_height),
-                    room_type='garage',
-                    color='#B0B0B0'  # Gray
-                ))
-                x_pos += garage_w + self.WALL_INTERNAL
+            garage_width = min(18, zone_width * 0.35)
+            rooms.append({
+                'id': str(uuid.uuid4()),
+                'label': 'Garage',
+                'name': 'Garage',
+                'type': 'garage',
+                'x': x_pos,
+                'y': y_pos,
+                'width': garage_width,
+                'height': public_depth - wall_thick_ext,
+                'color': '#F0F0F0'
+            })
+            x_draw = x_pos + garage_width + wall_thick_int
+        else:
+            x_draw = x_pos
         
-        # Right side: Drawing/Living Room
-        available_w = public['x_max'] - x_pos - self.WALL_EXTERNAL
-        draw_w, draw_h = self.ROOM_STANDARDS['drawing']
-        actual_draw_w = min(draw_w, available_w)
-        actual_draw_h = min(draw_h, zone_height)
+        # Drawing/Living Room
+        draw_width = zone_width - (x_draw - x_pos) - wall_thick_ext
+        rooms.append({
+            'id': str(uuid.uuid4()),
+            'label': 'Drawing Room',
+            'name': 'Drawing Room',
+            'type': 'drawing',
+            'x': x_draw,
+            'y': y_pos,
+            'width': draw_width,
+            'height': public_depth - wall_thick_ext,
+            'color': '#E8F0FF'
+        })
         
-        if actual_draw_w > 10 and actual_draw_h > 10:  # Minimum viable room
-            self.rooms.append(Room(
-                name='Drawing Room' if drawing_type == 'formal' else 'Living Room',
-                x=x_pos,
-                y=y_pos,
-                width=actual_draw_w,
-                height=actual_draw_h,
-                room_type='drawing',
-                color='#87CEEB'  # Cyan
-            ))
+        # ===== SERVICE ZONE =====
+        service_y = y_pos + public_depth + wall_thick_int
+        kitchen_width = zone_width * 0.45
         
-        # ===== SERVICE ZONE (Kitchen, Dining) =====
-        service = zones['service']
-        service_w = service['x_max'] - service['x_min'] - 2*self.WALL_EXTERNAL
-        service_h = service['y_max'] - service['y_min'] - 2*self.WALL_EXTERNAL
+        rooms.append({
+            'id': str(uuid.uuid4()),
+            'label': 'Kitchen',
+            'name': 'Kitchen',
+            'type': 'kitchen',
+            'x': x_pos,
+            'y': service_y,
+            'width': kitchen_width,
+            'height': service_depth - wall_thick_int,
+            'color': '#FFF9E6'
+        })
         
-        # Kitchen on left, Dining on right
-        kitchen_w = min(self.ROOM_STANDARDS['kitchen'][0], service_w / 2 - self.WALL_INTERNAL/2)
-        kitchen_h = min(self.ROOM_STANDARDS['kitchen'][1], service_h)
+        rooms.append({
+            'id': str(uuid.uuid4()),
+            'label': 'Dining',
+            'name': 'Dining',
+            'type': 'dining',
+            'x': x_pos + kitchen_width + wall_thick_int,
+            'y': service_y,
+            'width': zone_width - kitchen_width - wall_thick_int,
+            'height': service_depth - wall_thick_int,
+            'color': '#FFE8D4'
+        })
         
-        self.rooms.append(Room(
-            name='Kitchen',
-            x=service['x_min'] + self.WALL_EXTERNAL,
-            y=service['y_min'] + self.WALL_EXTERNAL,
-            width=kitchen_w,
-            height=kitchen_h,
-            room_type='kitchen',
-            color='#FFFF00'  # Yellow
-        ))
+        # ===== PRIVATE ZONE =====
+        private_y = service_y + service_depth + wall_thick_int
         
-        # Dining room
-        dining_w = service_w - kitchen_w - self.WALL_INTERNAL
-        dining_h = min(self.ROOM_STANDARDS['dining'][1], service_h)
+        bed_count = 0
+        for room_type in rooms_brief:
+            if room_type.get('type') == 'bedroom':
+                bed_count = room_type.get('count', 1)
+                break
         
-        self.rooms.append(Room(
-            name='Dining',
-            x=service['x_min'] + self.WALL_EXTERNAL + kitchen_w + self.WALL_INTERNAL,
-            y=service['y_min'] + self.WALL_EXTERNAL,
-            width=max(dining_w, 8),
-            height=dining_h,
-            room_type='dining',
-            color='#FFB6C1'  # Pink
-        ))
+        if bed_count == 0:
+            bed_count = 2
         
-        # ===== PRIVATE ZONE (Bedrooms + Bathrooms) =====
-        private = zones['private']
-        private_w = private['x_max'] - private['x_min'] - 2*self.WALL_EXTERNAL
-        private_h = private['y_max'] - private['y_min'] - 2*self.WALL_EXTERNAL
+        bed_height = (private_depth - (bed_count - 1) * wall_thick_int) / bed_count
+        bed_width = zone_width * 0.55
         
-        x_room = private['x_min'] + self.WALL_EXTERNAL
-        y_room = private['y_min'] + self.WALL_EXTERNAL
+        bed_colors = ['#E8F4F8', '#BA55D3', '#DDA0DD']
+        bath_colors = ['#D4E8FF', '#4169E1', '#6495ED']
         
-        # Place bedrooms side by side
-        if bedroom_count >= 1:
-            bed_w = min(self.ROOM_STANDARDS['bedroom'][0], private_w / 2 - self.WALL_INTERNAL/2)
-            bed_h = min(self.ROOM_STANDARDS['bedroom'][1], private_h)
+        for i in range(bed_count):
+            bed_y = private_y + i * (bed_height + wall_thick_int)
             
-            # Master Bedroom (left)
-            self.rooms.append(Room(
-                name='Master Bedroom',
-                x=x_room,
-                y=y_room,
-                width=bed_w,
-                height=bed_h,
-                room_type='bedroom',
-                color='#800080'  # Purple
-            ))
+            bed_name = 'Master Bedroom' if i == 0 else f'Bedroom {i+1}'
+            rooms.append({
+                'id': str(uuid.uuid4()),
+                'label': bed_name,
+                'name': bed_name,
+                'type': 'bedroom',
+                'x': x_pos,
+                'y': bed_y,
+                'width': bed_width,
+                'height': bed_height,
+                'color': bed_colors[i % len(bed_colors)]
+            })
             
-            # Attached Bathroom to Master (right of bedroom)
-            bath_w = min(self.ROOM_STANDARDS['bathroom'][0], private_w - bed_w - self.WALL_INTERNAL)
-            bath_h = min(self.ROOM_STANDARDS['bathroom'][1], bed_h)
+            bath_width = zone_width - bed_width - wall_thick_int
+            rooms.append({
+                'id': str(uuid.uuid4()),
+                'label': f'Bathroom {i+1}',
+                'name': f'Bathroom {i+1}',
+                'type': 'bathroom',
+                'x': x_pos + bed_width + wall_thick_int,
+                'y': bed_y,
+                'width': bath_width,
+                'height': bed_height,
+                'color': bath_colors[i % len(bath_colors)]
+            })
+        
+        # ===== GENERATE WALLS WITH IDs =====
+        plot_min_x = start_x
+        plot_max_x = start_x + buildable_width
+        plot_min_y = start_y
+        plot_max_y = start_y + buildable_length
+        
+        wall_ids = []
+        
+        # North wall
+        wall_id_n = str(uuid.uuid4())
+        wall_ids.append(wall_id_n)
+        walls.append({
+            'id': wall_id_n,
+            'x1': plot_min_x, 'y1': plot_min_y,
+            'x2': plot_max_x, 'y2': plot_min_y,
+            'thickness': wall_thick_ext, 'isExternal': True
+        })
+        
+        # South wall
+        wall_id_s = str(uuid.uuid4())
+        wall_ids.append(wall_id_s)
+        walls.append({
+            'id': wall_id_s,
+            'x1': plot_min_x, 'y1': plot_max_y,
+            'x2': plot_max_x, 'y2': plot_max_y,
+            'thickness': wall_thick_ext, 'isExternal': True
+        })
+        
+        # West wall
+        wall_id_w = str(uuid.uuid4())
+        wall_ids.append(wall_id_w)
+        walls.append({
+            'id': wall_id_w,
+            'x1': plot_min_x, 'y1': plot_min_y,
+            'x2': plot_min_x, 'y2': plot_max_y,
+            'thickness': wall_thick_ext, 'isExternal': True
+        })
+        
+        # East wall
+        wall_id_e = str(uuid.uuid4())
+        wall_ids.append(wall_id_e)
+        walls.append({
+            'id': wall_id_e,
+            'x1': plot_max_x, 'y1': plot_min_y,
+            'x2': plot_max_x, 'y2': plot_max_y,
+            'thickness': wall_thick_ext, 'isExternal': True
+        })
+        
+        # ===== GENERATE OPENINGS WITH REQUIRED FIELDS =====
+        for i, room in enumerate(rooms):
+            if room['type'] not in ['bathroom', 'store']:
+                # Door
+                openings.append({
+                    'id': str(uuid.uuid4()),
+                    'kind': 'door',
+                    'type': 'door',
+                    'wallId': wall_ids[0],  # North wall
+                    'offset': room['x'] + 1.5,
+                    'x': room['x'] + 1.5,
+                    'y': room['y'],
+                    'width': 3.0,
+                    'height': 6.83,
+                    'direction': 'inward'
+                })
             
-            self.rooms.append(Room(
-                name='Master Bathroom',
-                x=x_room + bed_w + self.WALL_INTERNAL,
-                y=y_room,
-                width=bath_w,
-                height=bath_h,
-                room_type='bathroom',
-                color='#0000FF'  # Blue
-            ))
-            
-            # Second Bedroom (if exists)
-            if bedroom_count >= 2:
-                y_room += bed_h + self.WALL_INTERNAL
-                bed2_h = min(self.ROOM_STANDARDS['bedroom'][1], private_h - bed_h - self.WALL_INTERNAL)
-                
-                self.rooms.append(Room(
-                    name='Bedroom 2',
-                    x=x_room,
-                    y=y_room,
-                    width=bed_w,
-                    height=bed2_h,
-                    room_type='bedroom',
-                    color='#800080'  # Purple
-                ))
-                
-                # Attached Bathroom to Bedroom 2
-                self.rooms.append(Room(
-                    name='Bathroom 2',
-                    x=x_room + bed_w + self.WALL_INTERNAL,
-                    y=y_room,
-                    width=bath_w,
-                    height=bath_h,
-                    room_type='bathroom',
-                    color='#0000FF'  # Blue
-                ))
-                
-            # Third Bedroom (if exists)
-            if bedroom_count >= 3:
-                y_room += bed2_h + self.WALL_INTERNAL
-                bed3_h = min(self.ROOM_STANDARDS['bedroom'][1], private_h - bed_h - bed2_h - 2*self.WALL_INTERNAL)
-                
-                self.rooms.append(Room(
-                    name='Bedroom 3',
-                    x=x_room,
-                    y=y_room,
-                    width=bed_w,
-                    height=bed3_h,
-                    room_type='bedroom',
-                    color='#800080'  # Purple
-                ))
-                
-                self.rooms.append(Room(
-                    name='Bathroom 3',
-                    x=x_room + bed_w + self.WALL_INTERNAL,
-                    y=y_room,
-                    width=bath_w,
-                    height=bath_h,
-                    room_type='bathroom',
-                    color='#0000FF'  # Blue
-                ))
+            # Windows
+            if room['type'] in ['bedroom', 'drawing', 'living', 'lounge']:
+                openings.append({
+                    'id': str(uuid.uuid4()),
+                    'kind': 'window',
+                    'type': 'window',
+                    'wallId': wall_ids[0],  # North wall
+                    'offset': room['x'] + room['width'] / 2,
+                    'x': room['x'] + room['width'] / 2,
+                    'y': room['y'],
+                    'width': 3.5,
+                    'height': 4.0,
+                    'direction': 'outward'
+                })
+        
+        return {
+            'status': 'success',
+            'rooms': rooms,
+            'walls': walls,
+            'openings': openings,
+            'dimensions': {
+                'plotWidth': plot_width,
+                'plotLength': plot_length,
+                'buildableWidth': buildable_width,
+                'buildableLength': buildable_length,
+                'totalArea': buildable_width * buildable_length
+            },
+            'buildable': {
+                'width': buildable_width,
+                'length': buildable_length,
+                'min_x': start_x,
+                'max_x': start_x + buildable_width,
+                'min_y': start_y,
+                'max_y': start_y + buildable_length
+            }
+        }
     
-    def generate_walls(self, buildable: Dict, corners: List[Point]):
-        """Generate exterior and interior walls"""
-        # Exterior walls (thick - 9 inches)
-        ext_min_x = buildable['min_x']
-        ext_max_x = buildable['max_x']
-        ext_min_y = buildable['min_y']
-        ext_max_y = buildable['max_y']
-        
-        # Front wall (North)
-        self.walls.append(Wall(
-            ext_min_x, ext_min_y,
-            ext_max_x, ext_min_y,
-            self.WALL_EXTERNAL, True
-        ))
-        
-        # Back wall (South)
-        self.walls.append(Wall(
-            ext_min_x, ext_max_y,
-            ext_max_x, ext_max_y,
-            self.WALL_EXTERNAL, True
-        ))
-        
-        # Left wall (West)
-        self.walls.append(Wall(
-            ext_min_x, ext_min_y,
-            ext_min_x, ext_max_y,
-            self.WALL_EXTERNAL, True
-        ))
-        
-        # Right wall (East)
-        self.walls.append(Wall(
-            ext_max_x, ext_min_y,
-            ext_max_x, ext_max_y,
-            self.WALL_EXTERNAL, True
-        ))
-        
-        # Interior walls - drawn between rooms
-        # This is simplified - in production you'd trace walls between room boundaries
-        for i, room in enumerate(self.rooms):
-            # Each room creates invisible boundaries
-            # Walls are created by room adjacency
-            pass
-    
-    def add_openings(self):
-        """Add doors and windows to rooms"""
-        for room in self.rooms:
-            # Windows on external walls
-            if room.x == 0 or room.x + room.width >= 40:  # On external wall
-                self.openings.append(Opening(
-                    room.x + room.width/2,
-                    room.y,
-                    3, 4,  # 3'x4' window
-                    'window',
-                    'N'
-                ))
-            
-            # Doors
-            if room.room_type != 'bathroom':
-                self.openings.append(Opening(
-                    room.x + 1,
-                    room.y,
-                    3, 6.8,  # 3'x6'8" door
-                    'door',
-                    'S'
-                ))
-    
-    def error_response(self, message: str) -> Dict:
-        """Return error response"""
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {
             'status': 'error',
-            'message': message,
+            'message': str(e),
             'rooms': [],
             'walls': [],
-            'openings': [],
-            'warnings': [message]
+            'openings': []
         }
 
 
-def generate_layout_variants(brief: Dict) -> List[Dict]:
-    """Generate 3 layout variants from same brief"""
+def generate_floor_plan_variants(brief):
+    """Generate 3 variants"""
     variants = []
     
-    for variant_num in range(1, 4):
-        generator = ArchitecturalLayoutGenerator(brief)
-        layout = generator.generate_layout()
-        layout['variant'] = chr(64 + variant_num)  # A, B, C
+    for i in range(3):
+        layout = generate_floor_plan(brief)
+        layout['variant'] = chr(65 + i)
+        layout['variantName'] = f'Layout {chr(65 + i)}'
         variants.append(layout)
     
     return variants

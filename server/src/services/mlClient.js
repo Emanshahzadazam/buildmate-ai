@@ -1,6 +1,5 @@
 import axios from "axios";
-
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8000";
+const ML_BASE = process.env.ML_SERVICE_URL || "http://localhost:8000";
 
 export const generateLayoutVariantsViaML = async (brief) => {
   const payload = {
@@ -23,12 +22,17 @@ export const generateLayoutVariantsViaML = async (brief) => {
   };
 
   try {
+    console.log("🔄 Sending to ML:", ML_BASE);
+    console.log("📦 Payload:", payload);
+    
     const { data } = await axios.post(
-      `${ML_SERVICE_URL}/generate-variants`,
+      `${ML_BASE}/generate-variants`,
       payload,
       { timeout: 30000 }
     );
-    return data.variants;
+    
+    console.log("✅ ML Response:", data);
+    return data;
   } catch (err) {
     if (err.response) {
       throw new Error(`ML error: ${err.response.data?.detail || err.response.statusText}`);
@@ -39,7 +43,7 @@ export const generateLayoutVariantsViaML = async (brief) => {
     throw err;
   }
 };
-
+  
 export const generateLayoutViaML = async (brief) => {
   const variants = await generateLayoutVariantsViaML(brief);
   return variants[0];

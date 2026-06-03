@@ -1,65 +1,76 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
-from app.schemas.layout import Brief, LayoutResponse
-from app.generator.smart import generate_layout_variants, ArchitecturalLayoutGenerator
+from pydantic import BaseModel
+from typing import List, Optional
+from .generator import generate_floor_plan, generate_three_variants
 
-app = FastAPI(title="BuildMate AI - ML Service", version="2.0")
+app = FastAPI(title="BuildMate AI - Layout Generator", version="1.0")
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "BuildMate AI ML Service",
-        "version": "2.0"
-    }
+class PlotSpec(BaseModel):
+    frontWidth: float
+    backWidth: float
+    leftLength: float
+    rightLength: float
+    unit: Optional[str] = "feet"
 
-@app.post("/generate", response_model=LayoutResponse)
-async def generate_single_layout(brief: Brief):
-    """
-    Generate a single floor plan layout
-    """
+class Setbacks(BaseModel):
+    front: float = 5
+    back: float = 5
+    left: float = 5
+    right: float = 5
+
+class RoomSpec(BaseModel):
+    type: str
+    count: int
+    size: Optional[str] = "default"
+
+class Technical(BaseModel):
+    floorHeight: float = 10
+    wallThicknessExt: float = 0.75
+    wallThicknessInt: float = 0.375
+    columnGrid: Optional[str] = "auto"
+
+class LayoutBrief(BaseModel):
+    plot: PlotSpec
+    setbacks: Setbacks
+    rooms: List[RoomSpec]
+    floors: Optional[int] = 1
+    hasGarage: Optional[bool] = False
+    hasStoreRoom: Optional[bool] = False
+    kitchenType: Optional[str] = "closed"
+    drawingRoomType: Optional[str] = "closed"
+    hasStaircase: Optional[bool] = False
+    staircaseType: Optional[str] = "none"
+    connectivity: Optional[dict] = {}
+    technical: Optional[Technical] = Technical()
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "service": "BuildMate Layout API"}
+
+@app.post("/generate")
+def generate_layout(brief: LayoutBrief):
+    """Generate single layout"""
     try:
-        generator = ArchitecturalLayoutGenerator(brief.dict())
-        layout = generator.generate_layout()
-        
-        if layout['status'] == 'error':
-            raise HTTPException(status_code=400, detail=layout['message'])
-        
-        return LayoutResponse(**layout)
-    
+        result = generate_floor_plan(brief.dict())
+        if result['status'] == 'error':
+            raise HTTPException(status_code=400, detail=result['message'])
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-variants")
-async def generate_layout_variants_endpoint(brief: Brief) -> List[LayoutResponse]:
-    """
-    Generate 3 layout variants (A, B, C)
-    All with same brief but different room arrangements
-    """
+def generate_variants_api(brief: LayoutBrief):
+    """Generate 3 layout variants (A, B, C)"""
     try:
-        variants = generate_layout_variants(brief.dict())
-        
-        # Validate all variants
-        for v in variants:
-            if v['status'] == 'error':
-                raise HTTPException(status_code=400, detail=v['message'])
-        
-        return [LayoutResponse(**v) for v in variants]
-    
+        variants = generate_three_variants(brief.dict())
+        return variants
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Variant generation failed: {str(e)}")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        raise HTTPException(status_code=500, detail=str(e))
