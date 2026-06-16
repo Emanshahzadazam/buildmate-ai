@@ -2,7 +2,7 @@ import CostPanel from "../components/editor/CostPanel";
 import FloorPlanCanvas from "../components/canvas/FloorPlanCanvas";
 import ElevationCanvas from "../components/elevation/ElevationCanvas";
 import { useEffect, useRef, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { projectsApi } from "../lib/projectsApi";
 import Button from "../components/ui/Button";
 
@@ -13,6 +13,7 @@ const VIEW_TABS = [
   { key:"left",  label:"Left",       icon:"⬅",  desc:"Left side elevation" },
   { key:"right", label:"Right",      icon:"➡",  desc:"Right side elevation" },
   { key:"roof",  label:"Roof Plan",  icon:"🔺", desc:"Top view & roof structure" },
+  { key:"3d",    label:"3D View",    icon:"🏗️", desc:"Interactive isometric 3D house model" },
 ];
 
 const glass = {
@@ -382,6 +383,7 @@ function SummaryModal({ project, layout, onClose }) {
 // ── Editor ────────────────────────────────────────────────────────────────────
 export default function Editor() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [project,      setProject]      = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [generating,   setGenerating]   = useState(false);
@@ -540,16 +542,28 @@ export default function Editor() {
         {/* View tabs */}
         <div style={{ marginBottom:"1rem" }}>
           <div style={{ display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap" }}>
-            {VIEW_TABS.map((tab) => (
-              <button key={tab.key} onClick={() => setView(tab.key)} title={tab.desc}
-                style={{ display:"flex",alignItems:"center",gap:"0.35rem",padding:"0.45rem 1rem",borderRadius:999,fontSize:"0.8rem",fontWeight:700,border:"1.5px solid",cursor:"pointer",fontFamily:"inherit",transition:"all 0.25s",
-                  background: view===tab.key?"linear-gradient(135deg,#1a252f,#0f1419)":"rgba(255,255,255,0.7)",
-                  borderColor: view===tab.key?"transparent":"rgba(200,215,225,0.5)",
-                  color: view===tab.key?"white":"#546E7A",
-                  boxShadow: view===tab.key?"0 4px 12px rgba(26,37,47,0.25)":"none" }}>
-                <span style={{ fontSize:"0.85rem" }}>{tab.icon}</span>{tab.label}
-              </button>
-            ))}
+            {VIEW_TABS.map((tab) => {
+              const is3D = tab.key === "3d";
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => {
+                    if (is3D) {
+                      navigate(`/projects/${id}/3d`);
+                      return;
+                    }
+                    setView(tab.key);
+                  }}
+                  title={tab.desc}
+                  style={{ display:"flex",alignItems:"center",gap:"0.35rem",padding:"0.45rem 1rem",borderRadius:999,fontSize:"0.8rem",fontWeight:700,border:"1.5px solid",cursor:"pointer",fontFamily:"inherit",transition:"all 0.25s",
+                    background: is3D ? "linear-gradient(135deg,#7C3AED,#06B6D4)" : (view===tab.key?"linear-gradient(135deg,#1a252f,#0f1419)":"rgba(255,255,255,0.7)"),
+                    borderColor: is3D || view===tab.key?"transparent":"rgba(200,215,225,0.5)",
+                    color: is3D || view===tab.key?"white":"#546E7A",
+                    boxShadow: is3D ? "0 6px 16px rgba(124,58,237,0.28)" : (view===tab.key?"0 4px 12px rgba(26,37,47,0.25)":"none") }}>
+                  <span style={{ fontSize:"0.85rem" }}>{tab.icon}</span>{tab.label}
+                </button>
+              );
+            })}
           </div>
           {activeTab && (
             <div style={{ marginTop:"0.45rem",display:"flex",alignItems:"center",gap:"0.5rem" }}>
