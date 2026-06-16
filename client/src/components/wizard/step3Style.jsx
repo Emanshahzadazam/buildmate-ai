@@ -1,125 +1,89 @@
 const KITCHEN_TYPES = [
-  { value: "open", label: "Open Kitchen", desc: "Connected to living/dining" },
-  { value: "closed", label: "Closed Kitchen", desc: "Separate enclosed space" },
+  { value:"open",   label:"Open Kitchen",   desc:"Connected to living/dining" },
+  { value:"closed", label:"Closed Kitchen", desc:"Separate enclosed space"    },
 ];
-
 const DRAWING_TYPES = [
-  { value: "closed", label: "Closed", desc: "Separate room with door" },
-  { value: "open", label: "Open", desc: "Open to main area" },
-  { value: "none", label: "None", desc: "No drawing room" },
+  { value:"closed", label:"Closed", desc:"Separate room with door" },
+  { value:"open",   label:"Open",   desc:"Open to main area"       },
+  { value:"none",   label:"None",   desc:"No drawing room"         },
+];
+const CONNECTIVITY = [
+  { key:"kitchenDining", label:"Kitchen & Dining", options:[{value:"connected",label:"Connected"},{value:"separate",label:"Separate"}] },
+  { key:"bathroom",      label:"Bathrooms",        options:[{value:"attached",label:"All attached"},{value:"common",label:"All common"},{value:"mixed",label:"Mixed"}] },
+  { key:"drawingRoom",   label:"Drawing Room",     options:[{value:"separate-entrance",label:"Separate entrance"},{value:"connected-to-lounge",label:"Connected to lounge"}] },
+  { key:"bedroomNear",   label:"Bedrooms near",    options:[{value:"any",label:"Any"},{value:"living-room",label:"Living room"},{value:"kitchen",label:"Kitchen"}] },
 ];
 
-const CONNECTIVITY = [
-  {
-    key: "kitchenDining",
-    label: "Kitchen & Dining",
-    options: [
-      { value: "connected", label: "Connected" },
-      { value: "separate", label: "Separate" },
-    ],
-  },
-  {
-    key: "bathroom",
-    label: "Bathrooms",
-    options: [
-      { value: "attached", label: "All attached" },
-      { value: "common", label: "All common" },
-      { value: "mixed", label: "Mixed" },
-    ],
-  },
-  {
-    key: "drawingRoom",
-    label: "Drawing Room",
-    options: [
-      { value: "separate-entrance", label: "Separate entrance" },
-      { value: "connected-to-lounge", label: "Connected to lounge" },
-    ],
-  },
-  {
-    key: "bedroomNear",
-    label: "Bedrooms near",
-    options: [
-      { value: "any", label: "Any" },
-      { value: "living-room", label: "Living room" },
-      { value: "kitchen", label: "Kitchen" },
-    ],
-  },
-];
+const panel = {
+  background:"rgba(255,255,255,0.75)",
+  border:"1px solid rgba(200,215,225,0.5)",
+  borderRadius:"16px",
+  padding:"1.25rem 1.4rem",
+  marginBottom:"1.25rem",
+};
+
+const optBtn = (active) => ({
+  padding:"0.45rem 1rem",borderRadius:"999px",fontSize:"0.8rem",fontWeight:700,
+  border:"1.5px solid",cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",
+  background: active ? "linear-gradient(135deg,#1E88E5,#00BCD4)" : "rgba(255,255,255,0.7)",
+  borderColor: active ? "transparent" : "rgba(200,215,225,0.5)",
+  color: active ? "white" : "#546E7A",
+  boxShadow: active ? "0 3px 10px rgba(30,136,229,0.25)" : "none",
+});
 
 export default function Step3Style({ form, setForm }) {
-  const set = (key, value) => setForm({ ...form, [key]: value });
-  const setConn = (key, value) =>
-    setForm({ ...form, connectivity: { ...form.connectivity, [key]: value } });
+  const set     = (key, value) => setForm({ ...form, [key]: value });
+  const setConn = (key, value) => setForm({ ...form, connectivity:{ ...form.connectivity, [key]: value } });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Style & Connectivity</h2>
-        <p className="text-sm text-slate-600 mt-1">
-          How should rooms connect and flow into each other?
-        </p>
+    <div>
+      <div style={{ marginBottom:"1.5rem" }}>
+        <h2 style={{ fontFamily:"'Syne',sans-serif",fontSize:"1.2rem",fontWeight:800,color:"#1a252f",letterSpacing:"-0.03em" }}>Style & Connectivity</h2>
+        <p style={{ fontSize:"0.85rem",color:"#546E7A",marginTop:"0.2rem" }}>How should rooms connect and flow into each other?</p>
       </div>
 
-      {/* Kitchen type */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-3">Kitchen style</h3>
-        <div className="grid grid-cols-2 gap-3">
+      {/* Kitchen style */}
+      <div style={panel}>
+        <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"0.9rem" }}>Kitchen style</h3>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.65rem" }}>
           {KITCHEN_TYPES.map((k) => (
-            <button
-              key={k.value}
-              type="button"
-              onClick={() => set("kitchenType", k.value)}
-              className={`p-3 rounded-xl border text-left transition-colors ${
-                form.kitchenType === k.value
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              <p className="font-medium text-sm text-slate-900">{k.label}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{k.desc}</p>
+            <button key={k.value} type="button" onClick={() => set("kitchenType", k.value)}
+              style={{ padding:"0.85rem 1rem",borderRadius:14,border:"1.5px solid",cursor:"pointer",textAlign:"left",transition:"all 0.2s",fontFamily:"inherit",
+                background: form.kitchenType === k.value ? "linear-gradient(135deg,rgba(30,136,229,0.1),rgba(0,188,212,0.07))" : "rgba(255,255,255,0.6)",
+                borderColor: form.kitchenType === k.value ? "rgba(30,136,229,0.4)" : "rgba(200,215,225,0.4)",
+              }}>
+              <p style={{ fontSize:"0.85rem",fontWeight:800,color:"#1a252f",marginBottom:"0.2rem" }}>{k.label}</p>
+              <p style={{ fontSize:"0.72rem",color:"#546E7A" }}>{k.desc}</p>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Drawing room type */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-3">Drawing room</h3>
-        <div className="grid grid-cols-3 gap-3">
+      {/* Drawing room */}
+      <div style={panel}>
+        <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"0.9rem" }}>Drawing room</h3>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.65rem" }}>
           {DRAWING_TYPES.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              onClick={() => set("drawingRoomType", d.value)}
-              className={`p-3 rounded-xl border text-left transition-colors ${
-                form.drawingRoomType === d.value
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              <p className="font-medium text-sm text-slate-900">{d.label}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{d.desc}</p>
+            <button key={d.value} type="button" onClick={() => set("drawingRoomType", d.value)}
+              style={{ padding:"0.85rem 0.75rem",borderRadius:14,border:"1.5px solid",cursor:"pointer",textAlign:"left",transition:"all 0.2s",fontFamily:"inherit",
+                background: form.drawingRoomType === d.value ? "linear-gradient(135deg,rgba(30,136,229,0.1),rgba(0,188,212,0.07))" : "rgba(255,255,255,0.6)",
+                borderColor: form.drawingRoomType === d.value ? "rgba(30,136,229,0.4)" : "rgba(200,215,225,0.4)",
+              }}>
+              <p style={{ fontSize:"0.82rem",fontWeight:800,color:"#1a252f",marginBottom:"0.2rem" }}>{d.label}</p>
+              <p style={{ fontSize:"0.7rem",color:"#546E7A" }}>{d.desc}</p>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Staircase */}
+      {/* Staircase — only if multi-floor */}
       {form.floors > 1 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="font-semibold text-slate-900 mb-3">Staircase type</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {["straight", "L-shape", "U-shape"].map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setForm({ ...form, staircaseType: s })}
-                className={`p-3 rounded-xl border text-center text-sm font-medium transition-colors ${
-                  form.staircaseType === s
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                }`}
-              >
+        <div style={panel}>
+          <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"0.9rem" }}>Staircase type</h3>
+          <div style={{ display:"flex",gap:"0.5rem",flexWrap:"wrap" }}>
+            {["straight","L-shape","U-shape"].map((s) => (
+              <button key={s} type="button" onClick={() => setForm({ ...form, staircaseType:s })}
+                style={optBtn(form.staircaseType === s)}>
                 {s}
               </button>
             ))}
@@ -128,28 +92,16 @@ export default function Step3Style({ form, setForm }) {
       )}
 
       {/* Connectivity */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-4">
-          Adjacency rules
-        </h3>
-        <div className="space-y-4">
+      <div style={panel}>
+        <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"1rem" }}>Adjacency rules</h3>
+        <div style={{ display:"flex",flexDirection:"column",gap:"1rem" }}>
           {CONNECTIVITY.map((c) => (
             <div key={c.key}>
-              <p className="text-sm font-medium text-slate-700 mb-2">
-                {c.label}
-              </p>
-              <div className="flex gap-2 flex-wrap">
+              <p style={{ fontSize:"0.8rem",fontWeight:700,color:"#546E7A",marginBottom:"0.5rem" }}>{c.label}</p>
+              <div style={{ display:"flex",gap:"0.4rem",flexWrap:"wrap" }}>
                 {c.options.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setConn(c.key, opt.value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                      form.connectivity?.[c.key] === opt.value
-                        ? "bg-brand-500 text-white border-brand-500"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
+                  <button key={opt.value} type="button" onClick={() => setConn(c.key, opt.value)}
+                    style={optBtn(form.connectivity?.[c.key] === opt.value)}>
                     {opt.label}
                   </button>
                 ))}
@@ -159,28 +111,20 @@ export default function Step3Style({ form, setForm }) {
         </div>
       </div>
 
-      {/* Extras */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-3">Extras</h3>
-        <div className="space-y-3">
-          {[
-            { key: "hasGarage", label: "Garage" },
-            { key: "hasStoreRoom", label: "Store room" },
-          ].map((item) => (
-            <div key={item.key} className="flex items-center justify-between">
-              <span className="text-sm text-slate-700">{item.label}</span>
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, [item.key]: !form[item.key] })}
-                className={`w-11 h-6 rounded-full transition-colors relative ${
-                  form[item.key] ? "bg-brand-500" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    form[item.key] ? "translate-x-5" : "translate-x-0.5"
-                  }`}
-                />
+      {/* Extras toggles */}
+      <div style={panel}>
+        <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"1rem" }}>Extras</h3>
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.75rem" }}>
+          {[{key:"hasGarage",label:"Garage"},{key:"hasStoreRoom",label:"Store room"}].map((item) => (
+            <div key={item.key} style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+              <span style={{ fontSize:"0.85rem",fontWeight:600,color:"#546E7A" }}>{item.label}</span>
+              <button type="button" onClick={() => setForm({ ...form, [item.key]:!form[item.key] })}
+                style={{ width:44,height:24,borderRadius:999,border:"none",cursor:"pointer",position:"relative",transition:"background 0.25s",
+                  background: form[item.key] ? "linear-gradient(135deg,#1E88E5,#00BCD4)" : "rgba(144,164,174,0.25)",
+                }}>
+                <span style={{ position:"absolute",top:2,width:20,height:20,borderRadius:"50%",background:"white",boxShadow:"0 1px 4px rgba(0,0,0,0.15)",transition:"transform 0.25s",
+                  transform: form[item.key] ? "translateX(22px)" : "translateX(2px)",
+                }} />
               </button>
             </div>
           ))}

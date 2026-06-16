@@ -179,7 +179,7 @@ export default function NewProject() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
+    <div className="max-w-4xl mx-auto px-6 py-20">
       <h1 className="text-3xl font-bold text-slate-900">New project</h1>
       <p className="mt-1 text-slate-600 mb-8">
         Step {currentStep} of {STEPS.length}:{" "}

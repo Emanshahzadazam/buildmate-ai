@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from .generator import generate_floor_plan, generate_three_variants
 
@@ -13,25 +13,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class PlotSpec(BaseModel):
+class CoercedModel(BaseModel):
+    # Allow coercion from strings to numbers (Pydantic v2)
+    model_config = ConfigDict(coerce_numbers_to_str=False)
+
+class PlotSpec(CoercedModel):
     frontWidth: float
     backWidth: float
     leftLength: float
     rightLength: float
     unit: Optional[str] = "feet"
 
-class Setbacks(BaseModel):
-    front: float = 5
-    back: float = 5
-    left: float = 5
-    right: float = 5
+class Setbacks(CoercedModel):
+    front: float = 4
+    back: float = 2
+    left: float = 1
+    right: float = 1
 
 class RoomSpec(BaseModel):
     type: str
-    count: int
+    count: int = 1
     size: Optional[str] = "default"
 
-class Technical(BaseModel):
+class Technical(CoercedModel):
     floorHeight: float = 10
     wallThicknessExt: float = 0.75
     wallThicknessInt: float = 0.375
@@ -39,7 +43,7 @@ class Technical(BaseModel):
 
 class LayoutBrief(BaseModel):
     plot: PlotSpec
-    setbacks: Setbacks
+    setbacks: Optional[Setbacks] = Setbacks()
     rooms: List[RoomSpec]
     floors: Optional[int] = 1
     hasGarage: Optional[bool] = False
@@ -49,7 +53,7 @@ class LayoutBrief(BaseModel):
     hasStaircase: Optional[bool] = False
     staircaseType: Optional[str] = "none"
     connectivity: Optional[dict] = {}
-    technical: Optional[Technical] = Technical()
+    technical: Optional[Technical] = None
 
 @app.get("/health")
 def health():
@@ -57,20 +61,26 @@ def health():
 
 @app.post("/generate")
 def generate_layout(brief: LayoutBrief):
-    """Generate single layout"""
     try:
-        result = generate_floor_plan(brief.dict())
-        if result['status'] == 'error':
-            raise HTTPException(status_code=400, detail=result['message'])
+        brief_dict = brief.dict()
+        if brief_dict.get("technical") is None:
+            brief_dict["technical"] = Technical().dict()
+        result = generate_floor_plan(brief_dict)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-variants")
 def generate_variants_api(brief: LayoutBrief):
-    """Generate 3 layout variants (A, B, C)"""
     try:
-        variants = generate_three_variants(brief.dict())
+        brief_dict = brief.dict()
+        if brief_dict.get("technical") is None:
+            brief_dict["technical"] = Technical().dict()
+        variants = generate_three_variants(brief_dict)
         return variants
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

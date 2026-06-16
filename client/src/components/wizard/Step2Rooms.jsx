@@ -1,38 +1,51 @@
-import Input from "../ui/Input";
+// import Input from "../ui/Input";
 
 const BEDROOM_SIZES = [
-  { value: "master", label: "Master" },
-  { value: "medium", label: "Medium" },
-  { value: "small", label: "Small" },
+  { value:"master", label:"Master" },
+  { value:"medium", label:"Medium" },
+  { value:"small",  label:"Small"  },
 ];
 
 const ROOM_TYPES = [
-  { key: "bedroom",  label: "Bedrooms",   hasSize: true },
-  { key: "bathroom", label: "Bathrooms",  hasSize: false },
-  { key: "kitchen",  label: "Kitchen",    hasSize: false, max: 2 },
-  { key: "living",   label: "Living Room", hasSize: false, max: 1 },
-  { key: "dining",   label: "Dining",     hasSize: false, max: 1 },
-  { key: "drawing",  label: "Drawing Room", hasSize: false, max: 1 },
-  { key: "study",    label: "Study",      hasSize: false, max: 2 },
-  { key: "store",    label: "Store Room", hasSize: false, max: 2 },
+  { key:"bedroom",  label:"Bedrooms",     hasSize:true  },
+  { key:"bathroom", label:"Bathrooms",    hasSize:false },
+  { key:"kitchen",  label:"Kitchen",      hasSize:false, max:2 },
+  { key:"living",   label:"Living Room",  hasSize:false, max:1 },
+  { key:"dining",   label:"Dining",       hasSize:false, max:1 },
+  { key:"drawing",  label:"Drawing Room", hasSize:false, max:1 },
+  { key:"study",    label:"Study",        hasSize:false, max:2 },
+  { key:"store",    label:"Store Room",   hasSize:false, max:2 },
 ];
 
-export default function Step2Rooms({ form, setForm, errors }) {
-  // form.roomCounts = { bedroom: 2, bathroom: 2, ... }
-  // form.bedroomSizes = ["master", "medium"]   (array indexed by bedroom number)
+const panel = {
+  background:"rgba(255,255,255,0.75)",
+  border:"1px solid rgba(200,215,225,0.5)",
+  borderRadius:"16px",
+  padding:"1.25rem 1.4rem",
+  marginBottom:"1.25rem",
+};
 
+const counterBtn = (disabled) => ({
+  width:30,height:30,borderRadius:8,
+  border:"1.5px solid rgba(200,215,225,0.7)",
+  background: disabled ? "rgba(200,215,225,0.15)" : "rgba(255,255,255,0.8)",
+  color: disabled ? "#90A4AE" : "#1a252f",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontSize:"1rem",fontWeight:700,
+  display:"flex",alignItems:"center",justifyContent:"center",
+  transition:"all 0.2s",fontFamily:"inherit",
+});
+
+export default function Step2Rooms({ form, setForm, errors }) {
   const setCount = (key, value) => {
     const newCount = Math.max(0, value);
     const next = { ...form, roomCounts: { ...form.roomCounts, [key]: newCount } };
-
-    // Adjust bedroomSizes array length when bedroom count changes
     if (key === "bedroom") {
       const sizes = [...(form.bedroomSizes || [])];
       while (sizes.length < newCount) sizes.push("medium");
       while (sizes.length > newCount) sizes.pop();
       next.bedroomSizes = sizes;
     }
-
     setForm(next);
   };
 
@@ -43,48 +56,30 @@ export default function Step2Rooms({ form, setForm, errors }) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Rooms</h2>
-        <p className="text-sm text-slate-600 mt-1">
-          How many of each room do you need? Set to 0 to skip.
-        </p>
+    <div>
+      <div style={{ marginBottom:"1.5rem" }}>
+        <h2 style={{ fontFamily:"'Syne',sans-serif",fontSize:"1.2rem",fontWeight:800,color:"#1a252f",letterSpacing:"-0.03em" }}>Rooms</h2>
+        <p style={{ fontSize:"0.85rem",color:"#546E7A",marginTop:"0.2rem" }}>How many of each room do you need? Set to 0 to skip.</p>
       </div>
 
       {errors.rooms && (
-        <p className="text-sm text-red-600">{errors.rooms}</p>
+        <div style={{ padding:"0.75rem 1rem",borderRadius:12,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",color:"#dc2626",fontSize:"0.82rem",fontWeight:500,marginBottom:"1rem" }}>
+          {errors.rooms}
+        </div>
       )}
 
       {/* Room counters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div style={panel}>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.65rem" }}>
           {ROOM_TYPES.map((r) => {
             const count = form.roomCounts?.[r.key] || 0;
             return (
-              <div
-                key={r.key}
-                className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2"
-              >
-                <span className="text-sm text-slate-700">{r.label}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCount(r.key, count - 1)}
-                    className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 text-center font-medium text-slate-900">
-                    {count}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCount(r.key, count + 1)}
-                    disabled={r.max && count >= r.max}
-                    className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-                  >
-                    +
-                  </button>
+              <div key={r.key} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.7rem 0.9rem",borderRadius:12,background:"rgba(255,255,255,0.6)",border:"1.5px solid rgba(200,215,225,0.4)",transition:"border-color 0.2s",borderColor: count > 0 ? "rgba(30,136,229,0.3)" : "rgba(200,215,225,0.4)" }}>
+                <span style={{ fontSize:"0.82rem",fontWeight:600,color: count > 0 ? "#1a252f" : "#546E7A" }}>{r.label}</span>
+                <div style={{ display:"flex",alignItems:"center",gap:"0.5rem" }}>
+                  <button type="button" onClick={() => setCount(r.key, count - 1)} style={counterBtn(count === 0)}>−</button>
+                  <span style={{ width:22,textAlign:"center",fontSize:"0.9rem",fontWeight:800,color:"#1a252f" }}>{count}</span>
+                  <button type="button" onClick={() => setCount(r.key, count + 1)} disabled={r.max && count >= r.max} style={counterBtn(r.max && count >= r.max)}>+</button>
                 </div>
               </div>
             );
@@ -92,29 +87,26 @@ export default function Step2Rooms({ form, setForm, errors }) {
         </div>
       </div>
 
-      {/* Bedroom sizes (only show if bedrooms > 0) */}
+      {/* Bedroom sizes */}
       {form.roomCounts?.bedroom > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="font-semibold text-slate-900 mb-1">Bedroom sizes</h3>
-          <p className="text-xs text-slate-500 mb-4">
-            Pick a size for each bedroom. Master rooms get more floor space.
-          </p>
-          <div className="space-y-3">
+        <div style={panel}>
+          <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"0.25rem" }}>Bedroom sizes</h3>
+          <p style={{ fontSize:"0.75rem",color:"#546E7A",marginBottom:"1rem" }}>Pick a size for each bedroom. Master rooms get more floor space.</p>
+          <div style={{ display:"flex",flexDirection:"column",gap:"0.65rem" }}>
             {Array.from({ length: form.roomCounts.bedroom }).map((_, idx) => (
-              <div key={idx} className="flex items-center gap-3">
-                <span className="text-sm text-slate-700 w-24">Bedroom {idx + 1}</span>
-                <div className="flex gap-2 flex-1">
+              <div key={idx} style={{ display:"flex",alignItems:"center",gap:"0.75rem" }}>
+                <span style={{ fontSize:"0.8rem",color:"#546E7A",fontWeight:600,width:80,flexShrink:0 }}>Bedroom {idx + 1}</span>
+                <div style={{ display:"flex",gap:"0.4rem",flex:1 }}>
                   {BEDROOM_SIZES.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => setBedroomSize(idx, s.value)}
-                      className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                        form.bedroomSizes?.[idx] === s.value
-                          ? "bg-brand-500 text-white border-brand-500"
-                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
+                    <button key={s.value} type="button" onClick={() => setBedroomSize(idx, s.value)}
+                      style={{
+                        flex:1,padding:"0.45rem 0.5rem",borderRadius:10,fontSize:"0.78rem",fontWeight:700,
+                        border:"1.5px solid",cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",
+                        background: form.bedroomSizes?.[idx] === s.value ? "linear-gradient(135deg,#1E88E5,#00BCD4)" : "rgba(255,255,255,0.7)",
+                        borderColor: form.bedroomSizes?.[idx] === s.value ? "transparent" : "rgba(200,215,225,0.5)",
+                        color: form.bedroomSizes?.[idx] === s.value ? "white" : "#546E7A",
+                        boxShadow: form.bedroomSizes?.[idx] === s.value ? "0 3px 10px rgba(30,136,229,0.25)" : "none",
+                      }}>
                       {s.label}
                     </button>
                   ))}
@@ -126,28 +118,14 @@ export default function Step2Rooms({ form, setForm, errors }) {
       )}
 
       {/* Floors */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-3">Floors</h3>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-700">Number of floors</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, floors: Math.max(1, (form.floors || 1) - 1) })}
-              className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
-            >
-              −
-            </button>
-            <span className="w-6 text-center font-medium text-slate-900">
-              {form.floors || 1}
-            </span>
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, floors: Math.min(5, (form.floors || 1) + 1) })}
-              className="h-7 w-7 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
-            >
-              +
-            </button>
+      <div style={panel}>
+        <h3 style={{ fontSize:"0.9rem",fontWeight:800,color:"#1a252f",marginBottom:"1rem" }}>Number of floors</h3>
+        <div style={{ display:"flex",alignItems:"center",gap:"0.75rem" }}>
+          <span style={{ fontSize:"0.85rem",color:"#546E7A",fontWeight:600 }}>Floors</span>
+          <div style={{ display:"flex",alignItems:"center",gap:"0.5rem" }}>
+            <button type="button" onClick={() => setForm({ ...form, floors: Math.max(1,(form.floors||1)-1) })} style={counterBtn((form.floors||1) <= 1)}>−</button>
+            <span style={{ width:28,textAlign:"center",fontSize:"1rem",fontWeight:800,color:"#1a252f" }}>{form.floors||1}</span>
+            <button type="button" onClick={() => setForm({ ...form, floors: Math.min(5,(form.floors||1)+1) })} style={counterBtn((form.floors||1) >= 5)}>+</button>
           </div>
         </div>
       </div>

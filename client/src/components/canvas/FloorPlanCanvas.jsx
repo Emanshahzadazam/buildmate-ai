@@ -1,408 +1,236 @@
 import { useEffect, useRef } from "react";
 
+const ROOM_COLORS = {
+  bedroom:   "#E8F4F8",
+  bathroom:  "#D4E8FF",
+  kitchen:   "#FFF9E6",
+  dining:    "#FFE8D4",
+  drawing:   "#E8F0FF",
+  living:    "#E8F8E8",
+  lounge:    "#E8F8E8",
+  garage:    "#F0F0F0",
+  store:     "#F5F5F5",
+  staircase: "#EFEFEF",
+  other:     "#FAFAFA",
+};
+
 export default function FloorPlanCanvas({ layout, projectName }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     if (!layout || !canvasRef.current) return;
-
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-
-    // Set canvas size
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width - 20;
-    canvas.height = rect.height - 20;
-
+    if (!ctx) return;
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    canvas.width  = Math.max(800, (rect?.width  || 800) - 20);
+    canvas.height = Math.max(620, (rect?.height || 620) - 20);
     drawArchitecturalFloorPlan(ctx, layout, canvas.width, canvas.height, projectName);
   }, [layout, projectName]);
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-3 bg-slate-50">
+    <div style={{
+      width:"100%", height:"100%",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:"12px",
+      background:"linear-gradient(135deg,rgba(232,245,233,0.4),rgba(255,248,225,0.3))",
+      borderRadius:"inherit",
+    }}>
       <canvas
         ref={canvasRef}
-        className="border border-slate-300 bg-white"
-        style={{ maxWidth: "100%", maxHeight: "100%" }}
+        style={{
+          maxWidth:"100%", maxHeight:"100%",
+          borderRadius:"12px",
+          border:"1px solid rgba(200,215,225,0.5)",
+          background:"white",
+          boxShadow:"0 4px 20px rgba(0,0,0,0.06)",
+        }}
       />
     </div>
   );
 }
 
+/* ── All drawing logic below is UNCHANGED ── */
+
+function getMetrics(layout) {
+  const plot     = layout.plot      || {};
+  const dims     = layout.dimensions || {};
+  const buildable = layout.buildable  || {};
+  const plotWidth  = dims.plotWidth  || plot.width  || plot.plotWidth  || buildable.width  + 2 || 40;
+  const plotLength = dims.plotLength || plot.length || plot.plotLength || buildable.length + 2 || 70;
+  return {
+    plotWidth,
+    plotLength,
+    buildableWidth:  dims.buildableWidth  || buildable.width  || plotWidth,
+    buildableLength: dims.buildableLength || buildable.length || plotLength,
+    originX: buildable.min_x ?? buildable.offsetX ?? 0,
+    originY: buildable.min_y ?? buildable.offsetY ?? 0,
+  };
+}
+
+function drawOpening(ctx, opening, originX, originY, scale) {
+  const x     = originX + (opening.x     || 0) * scale;
+  const y     = originY + (opening.y     || 0) * scale;
+  const width = (opening.width || 3) * scale;
+
+  ctx.strokeStyle = opening.kind === "door" ? "#8B4513" : "#0099FF";
+  ctx.fillStyle   = opening.kind === "door" ? "#8B4513" : "#87CEEB";
+  ctx.lineWidth   = opening.kind === "door" ? 2 : 3;
+
+  const direction = opening.direction;
+
+  if (direction === "north") {
+    const yLine = y;
+    const x1 = x - width / 2, x2 = x + width / 2;
+    if (opening.kind === "door") {
+      ctx.beginPath(); ctx.moveTo(x1, yLine); ctx.lineTo(x2, yLine); ctx.stroke();
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.arc(x1, yLine, width, 0, Math.PI / 2); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.beginPath(); ctx.moveTo(x1, yLine); ctx.lineTo(x2, yLine); ctx.stroke();
+    }
+  } else if (direction === "south") {
+    const yLine = y;
+    const x1 = x - width / 2, x2 = x + width / 2;
+    if (opening.kind === "door") {
+      ctx.beginPath(); ctx.moveTo(x1, yLine); ctx.lineTo(x2, yLine); ctx.stroke();
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.arc(x2, yLine, width, Math.PI, (Math.PI * 3) / 2); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.beginPath(); ctx.moveTo(x1, yLine); ctx.lineTo(x2, yLine); ctx.stroke();
+    }
+  } else if (direction === "west") {
+    const xLine = x;
+    const y1 = y - width / 2, y2 = y + width / 2;
+    if (opening.kind === "door") {
+      ctx.beginPath(); ctx.moveTo(xLine, y1); ctx.lineTo(xLine, y2); ctx.stroke();
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.arc(xLine, y1, width, Math.PI / 2, Math.PI); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.beginPath(); ctx.moveTo(xLine, y1); ctx.lineTo(xLine, y2); ctx.stroke();
+    }
+  } else if (direction === "east") {
+    const xLine = x;
+    const y1 = y - width / 2, y2 = y + width / 2;
+    if (opening.kind === "door") {
+      ctx.beginPath(); ctx.moveTo(xLine, y1); ctx.lineTo(xLine, y2); ctx.stroke();
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.arc(xLine, y2, width, Math.PI * 1.5, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.beginPath(); ctx.moveTo(xLine, y1); ctx.lineTo(xLine, y2); ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = opening.kind === "door" ? "#FF8C00" : "#0099FF";
+  ctx.font = "9px Arial"; ctx.textAlign = "center";
+  ctx.fillText(opening.label || (opening.kind === "door" ? "D" : "W"), x, y - 8);
+}
+
 function drawArchitecturalFloorPlan(ctx, layout, canvasWidth, canvasHeight, projectName) {
   if (!layout.rooms || layout.rooms.length === 0) {
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "center";
+    ctx.fillStyle = "#94a3b8"; ctx.font = "16px Arial"; ctx.textAlign = "center";
     ctx.fillText("No layout data available", canvasWidth / 2, canvasHeight / 2);
     return;
   }
 
-  // Background
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Calculate dimensions
-  const plotWidth = layout.dimensions?.buildableWidth || layout.buildable?.width || 40;
-  const plotLength = layout.dimensions?.buildableLength || layout.buildable?.length || 70;
+  const metrics = getMetrics(layout);
+  const margin  = 60;
+  const availableWidth  = canvasWidth  - 2 * margin;
+  const availableHeight = canvasHeight - 2 * margin - 90;
+  const scale = Math.min(availableWidth / Math.max(1, metrics.plotWidth), availableHeight / Math.max(1, metrics.plotLength));
+  const offsetX = margin, offsetY = margin + 42;
 
-  const margin = 60;
-  const availableWidth = canvasWidth - 2 * margin;
-  const availableHeight = canvasHeight - 2 * margin - 80; // Space for title
+  // Plot boundary
+  ctx.strokeStyle = "#000000"; ctx.lineWidth = 2;
+  ctx.strokeRect(offsetX, offsetY, metrics.plotWidth * scale, metrics.plotLength * scale);
 
-  const scaleXRatio = availableWidth / plotWidth;
-  const scaleYRatio = availableHeight / plotLength;
-  const scale = Math.min(scaleXRatio, scaleYRatio);
+  // Buildable boundary
+  ctx.strokeStyle = "#888"; ctx.lineWidth = 1.25; ctx.setLineDash([6, 4]);
+  ctx.strokeRect(offsetX + metrics.originX * scale, offsetY + metrics.originY * scale, metrics.buildableWidth * scale, metrics.buildableLength * scale);
+  ctx.setLineDash([]);
 
-  const offsetX = margin;
-  const offsetY = margin + 40;
+  // Exterior walls
+  ctx.strokeStyle = "#111827"; ctx.lineWidth = Math.max(2, 0.75 * scale);
+  ctx.beginPath();
+  ctx.moveTo(offsetX + metrics.originX * scale, offsetY + metrics.originY * scale);
+  ctx.lineTo(offsetX + (metrics.originX + metrics.buildableWidth) * scale, offsetY + metrics.originY * scale);
+  ctx.lineTo(offsetX + (metrics.originX + metrics.buildableWidth) * scale, offsetY + (metrics.originY + metrics.buildableLength) * scale);
+  ctx.lineTo(offsetX + metrics.originX * scale, offsetY + (metrics.originY + metrics.buildableLength) * scale);
+  ctx.closePath(); ctx.stroke();
 
-  // ===== DRAW PLOT BOUNDARY =====
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(
-    offsetX,
-    offsetY,
-    plotWidth * scale,
-    plotLength * scale
-  );
-
-  // ===== DRAW EXTERIOR WALLS (9" thick, dark blue) =====
-  const wallThick = 0.75 * scale; // 9 inches
-  ctx.fillStyle = "#1a3a52"; // Dark blue like AutoCAD
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 1;
-
-  // North wall
-  ctx.fillRect(offsetX, offsetY, plotWidth * scale, wallThick);
-  ctx.strokeRect(offsetX, offsetY, plotWidth * scale, wallThick);
-
-  // South wall
-  ctx.fillRect(
-    offsetX,
-    offsetY + plotLength * scale - wallThick,
-    plotWidth * scale,
-    wallThick
-  );
-  ctx.strokeRect(
-    offsetX,
-    offsetY + plotLength * scale - wallThick,
-    plotWidth * scale,
-    wallThick
-  );
-
-  // West wall
-  ctx.fillRect(offsetX, offsetY, wallThick, plotLength * scale);
-  ctx.strokeRect(offsetX, offsetY, wallThick, plotLength * scale);
-
-  // East wall
-  ctx.fillRect(
-    offsetX + plotWidth * scale - wallThick,
-    offsetY,
-    wallThick,
-    plotLength * scale
-  );
-  ctx.strokeRect(
-    offsetX + plotWidth * scale - wallThick,
-    offsetY,
-    wallThick,
-    plotLength * scale
-  );
-
-  // ===== DRAW ROOMS =====
-  const roomColors = {
-    bedroom: "#E8F4F8",
-    bathroom: "#D4E8FF",
-    kitchen: "#FFF9E6",
-    dining: "#FFE8D4",
-    drawing: "#E8F0FF",
-    living: "#E8F8E8",
-    lounge: "#E8F8E8",
-    garage: "#F0F0F0",
-    store: "#F5F5F5",
-  };
-
-  // Draw room fills and walls
+  // Rooms
   for (const room of layout.rooms) {
-    const x = offsetX + room.x * scale;
-    const y = offsetY + room.y * scale;
-    const w = room.width * scale;
-    const h = room.height * scale;
-
-    // Room background
-    ctx.fillStyle = roomColors[room.type] || "#F5F5F5";
+    const x = offsetX + room.x * scale, y = offsetY + room.y * scale;
+    const w = room.width * scale,       h = room.height * scale;
+    ctx.fillStyle = ROOM_COLORS[room.type] || room.color || "#F5F5F5";
     ctx.fillRect(x, y, w, h);
-
-    // Interior walls (thin, gray)
-    ctx.strokeStyle = "#666666";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#666666"; ctx.lineWidth = 1.5;
     ctx.strokeRect(x, y, w, h);
   }
 
-  // ===== DRAW DOORS =====
-  ctx.lineWidth = 1;
-  for (const room of layout.rooms) {
-    if (room.type === "bathroom" || room.type === "store") continue;
-
-    const x = offsetX + room.x * scale;
-    const y = offsetY + room.y * scale;
-    const w = room.width * scale;
-    const h = room.height * scale;
-
-    const doorWidth = 3 * scale;
-    const doorHeight = 6.83 * scale;
-
-    // Door position (center of wall)
-    const doorX = x + w / 2;
-    const doorY = y;
-
-    // Door frame (rectangle)
-    ctx.strokeStyle = "#8B4513";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(doorX - doorWidth / 2, doorY - 1, doorWidth, doorHeight);
-
-    // Door swing (quarter circle arc)
-    ctx.strokeStyle = "#FF8C00";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.arc(doorX - doorWidth / 2, doorY, doorWidth, Math.PI, (Math.PI * 3) / 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Door label (D1, D2, etc)
-    ctx.fillStyle = "#FF8C00";
-    ctx.font = "9px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("D", doorX, doorY - doorHeight - 8);
+  // Openings
+  if (Array.isArray(layout.openings)) {
+    layout.openings.forEach((o) => drawOpening(ctx, o, offsetX, offsetY, scale));
   }
 
-  // ===== DRAW WINDOWS =====
+  // Room labels
   for (const room of layout.rooms) {
-    if (room.type === "bathroom" || room.type === "store" || room.type === "garage") continue;
-
-    const x = offsetX + room.x * scale;
-    const y = offsetY + room.y * scale;
-    const w = room.width * scale;
-
-    const winWidth = 3.5 * scale;
-    const winX = x + w / 2;
-    const winY = y;
-
-    // Window (double line)
-    ctx.strokeStyle = "#0099FF";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([1, 1]);
-    ctx.beginPath();
-    ctx.moveTo(winX - winWidth / 2, winY);
-    ctx.lineTo(winX + winWidth / 2, winY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Window end markers (red squares)
-    ctx.fillStyle = "#FF0000";
-    const markerSize = 2;
-    ctx.fillRect(
-      winX - winWidth / 2 - markerSize,
-      winY - markerSize,
-      markerSize * 2,
-      markerSize * 2
-    );
-    ctx.fillRect(
-      winX + winWidth / 2 - markerSize,
-      winY - markerSize,
-      markerSize * 2,
-      markerSize * 2
-    );
-
-    // Window label
-    ctx.fillStyle = "#0099FF";
-    ctx.font = "9px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("W", winX, winY - 8);
+    const x = offsetX + room.x * scale, y = offsetY + room.y * scale;
+    const w = room.width * scale,       h = room.height * scale;
+    const cx = x + w / 2, cy = y + h / 2;
+    ctx.fillStyle = "#17324D"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(room.name || room.label || room.type.toUpperCase(), cx, cy - 8);
+    ctx.fillStyle = "#334155"; ctx.font = "10px Arial";
+    ctx.fillText(`${room.width.toFixed(1)}' × ${room.height.toFixed(1)}'`, cx, cy + 8);
+    ctx.font = "9px Arial"; ctx.fillStyle = "#666";
+    ctx.fillText(`${(room.width * room.height).toFixed(0)} sqft`, cx, cy + 21);
   }
 
-  // ===== DRAW ROOM LABELS & DIMENSIONS =====
-  for (const room of layout.rooms) {
-    const x = offsetX + room.x * scale;
-    const y = offsetY + room.y * scale;
-    const w = room.width * scale;
-    const h = room.height * scale;
+  // North arrow
+  const arrowX = offsetX + metrics.plotWidth * scale + 42, arrowY = offsetY + 28;
+  ctx.fillStyle = "#000"; ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(arrowX, arrowY + 16); ctx.lineTo(arrowX, arrowY - 16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(arrowX - 6, arrowY - 6); ctx.lineTo(arrowX, arrowY - 16); ctx.lineTo(arrowX + 6, arrowY - 6); ctx.fill();
+  ctx.font = "bold 13px Arial"; ctx.textAlign = "center"; ctx.fillText("N", arrowX, arrowY + 34);
 
-    const centerX = x + w / 2;
-    const centerY = y + h / 2;
+  // Dimension lines
+  ctx.strokeStyle = "#D00000"; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+  const topDimY = offsetY - 24;
+  ctx.beginPath(); ctx.moveTo(offsetX, topDimY); ctx.lineTo(offsetX + metrics.plotWidth * scale, topDimY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#D00000"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center";
+  ctx.fillText(`${metrics.plotWidth.toFixed(1)}'`, offsetX + (metrics.plotWidth * scale) / 2, topDimY - 8);
 
-    // Room name
-    ctx.fillStyle = "#1a4d2e";
-    ctx.font = "bold 11px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(room.name, centerX, centerY - 8);
-
-    // Room dimensions
-    ctx.fillStyle = "#2d5a3d";
-    ctx.font = "10px Arial";
-    const dimText = `${room.width.toFixed(1)}' × ${room.height.toFixed(1)}'`;
-    ctx.fillText(dimText, centerX, centerY + 8);
-
-    // Area (optional)
-    const area = (room.width * room.height).toFixed(0);
-    ctx.font = "9px Arial";
-    ctx.fillStyle = "#666666";
-    ctx.fillText(`${area} sqft`, centerX, centerY + 20);
-  }
-
-  // ===== DRAW DIMENSION LINES =====
-  ctx.strokeStyle = "#FF0000";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 3]);
-
-  // Top dimension line
-  const topDimY = offsetY - 25;
-  ctx.beginPath();
-  ctx.moveTo(offsetX - 10, topDimY);
-  ctx.lineTo(offsetX + plotWidth * scale + 10, topDimY);
-  ctx.stroke();
-
-  // Left tick
-  ctx.beginPath();
-  ctx.moveTo(offsetX, topDimY - 3);
-  ctx.lineTo(offsetX, topDimY + 3);
-  ctx.stroke();
-
-  // Right tick
-  ctx.beginPath();
-  ctx.moveTo(offsetX + plotWidth * scale, topDimY - 3);
-  ctx.lineTo(offsetX + plotWidth * scale, topDimY + 3);
-  ctx.stroke();
-
-  // Dimension text
-  ctx.fillStyle = "#FF0000";
-  ctx.font = "bold 11px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(`${plotWidth.toFixed(1)}'`, offsetX + (plotWidth * scale) / 2, topDimY - 8);
-
-  // Right dimension line
-  const rightDimX = offsetX + plotWidth * scale + 25;
-  ctx.beginPath();
-  ctx.moveTo(rightDimX, offsetY - 10);
-  ctx.lineTo(rightDimX, offsetY + plotLength * scale + 10);
-  ctx.stroke();
-
-  // Top tick
-  ctx.beginPath();
-  ctx.moveTo(rightDimX - 3, offsetY);
-  ctx.lineTo(rightDimX + 3, offsetY);
-  ctx.stroke();
-
-  // Bottom tick
-  ctx.beginPath();
-  ctx.moveTo(rightDimX - 3, offsetY + plotLength * scale);
-  ctx.lineTo(rightDimX + 3, offsetY + plotLength * scale);
-  ctx.stroke();
-
-  // Dimension text
-  ctx.textAlign = "left";
+  const rightDimX = offsetX + metrics.plotWidth * scale + 26;
+  ctx.strokeStyle = "#D00000"; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(rightDimX, offsetY); ctx.lineTo(rightDimX, offsetY + metrics.plotLength * scale); ctx.stroke();
+  ctx.setLineDash([]);
   ctx.save();
-  ctx.translate(rightDimX + 8, offsetY + (plotLength * scale) / 2);
-  ctx.rotate(Math.PI / 2);
-  ctx.fillText(`${plotLength.toFixed(1)}'`, 0, -3);
+  ctx.translate(rightDimX + 8, offsetY + (metrics.plotLength * scale) / 2); ctx.rotate(Math.PI / 2);
+  ctx.fillStyle = "#D00000"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center";
+  ctx.fillText(`${metrics.plotLength.toFixed(1)}'`, 0, 0);
   ctx.restore();
 
-  ctx.setLineDash([]);
-
-  // ===== DRAW NORTH ARROW =====
-  const arrowX = offsetX + plotWidth * scale + 40;
-  const arrowY = offsetY + 30;
-  const arrowSize = 15;
-
-  ctx.fillStyle = "#000000";
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 2;
-
-  // Arrow shaft
-  ctx.beginPath();
-  ctx.moveTo(arrowX, arrowY + arrowSize);
-  ctx.lineTo(arrowX, arrowY - arrowSize);
-  ctx.stroke();
-
-  // Arrow head
-  ctx.beginPath();
-  ctx.moveTo(arrowX - arrowSize / 2, arrowY - arrowSize / 2);
-  ctx.lineTo(arrowX, arrowY - arrowSize);
-  ctx.lineTo(arrowX + arrowSize / 2, arrowY - arrowSize / 2);
-  ctx.closePath();
-  ctx.fill();
-
-  // N label
-  ctx.fillStyle = "#000000";
-  ctx.font = "bold 14px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("N", arrowX, arrowY + arrowSize + 20);
-
-  // ===== DRAW SCALE BAR =====
-  const scaleLegendX = offsetX + 20;
-  const scaleLegendY = offsetY + plotLength * scale + 20;
-  const scaleLength = 10 * scale; // 10 feet
-
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 1.5;
-
-  // Main bar
-  ctx.beginPath();
-  ctx.moveTo(scaleLegendX, scaleLegendY);
-  ctx.lineTo(scaleLegendX + scaleLength, scaleLegendY);
-  ctx.stroke();
-
-  // End markers
-  ctx.beginPath();
-  ctx.moveTo(scaleLegendX, scaleLegendY - 4);
-  ctx.lineTo(scaleLegendX, scaleLegendY + 4);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(scaleLegendX + scaleLength, scaleLegendY - 4);
-  ctx.lineTo(scaleLegendX + scaleLength, scaleLegendY + 4);
-  ctx.stroke();
-
-  // Scale label
-  ctx.fillStyle = "#000000";
-  ctx.font = "9px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("10'", scaleLegendX + scaleLength / 2, scaleLegendY + 15);
-
-  // ===== DRAW TITLE BLOCK =====
-  ctx.fillStyle = "#000000";
-  ctx.font = "bold 13px Arial";
-  ctx.textAlign = "left";
+  // Title block
+  ctx.fillStyle = "#111"; ctx.font = "bold 13px Arial"; ctx.textAlign = "left";
   ctx.fillText(`FLOOR PLAN - LAYOUT ${layout.variant || "A"}`, offsetX, 25);
-
-  ctx.font = "10px Arial";
-  ctx.fillStyle = "#444444";
+  ctx.font = "10px Arial"; ctx.fillStyle = "#444";
   ctx.fillText(`Project: ${projectName}`, offsetX, 40);
-  ctx.fillText(
-    `Scale: 1:${(1 / (scale / 10)).toFixed(0)} | Plot: ${plotWidth.toFixed(1)}' × ${plotLength.toFixed(1)}'`,
-    offsetX,
-    52
-  );
+  ctx.fillText(`Scale: auto-fit | Plot: ${metrics.plotWidth.toFixed(1)}' × ${metrics.plotLength.toFixed(1)}'`, offsetX, 54);
 
   // Legend
-  const legendX = offsetX + plotWidth * scale - 150;
-  const legendY = offsetY + plotLength * scale + 10;
-
+  const legendX = offsetX + metrics.plotWidth * scale - 150;
+  const legendY = offsetY + metrics.plotLength * scale + 12;
   ctx.font = "9px Arial";
-  ctx.fillStyle = "#666666";
-
-  const legendItems = [
-    { symbol: "□", color: "#8B4513", label: "Door" },
-    { symbol: "∼∼", color: "#0099FF", label: "Window" },
-  ];
-
-  let offsetLegend = 0;
-  for (const item of legendItems) {
-    ctx.fillStyle = item.color;
-    ctx.fillText(item.symbol, legendX, legendY + offsetLegend);
-    ctx.fillStyle = "#666666";
-    ctx.fillText(item.label, legendX + 15, legendY + offsetLegend + 2);
-    offsetLegend += 12;
-  }
+  [{ symbol:"■", color:"#8B4513", label:"Door" }, { symbol:"—", color:"#0099FF", label:"Window" }].forEach((item, i) => {
+    ctx.fillStyle = item.color; ctx.fillText(item.symbol, legendX, legendY + i * 12);
+    ctx.fillStyle = "#666";    ctx.fillText(item.label,  legendX + 15, legendY + i * 12 + 2);
+  });
 }

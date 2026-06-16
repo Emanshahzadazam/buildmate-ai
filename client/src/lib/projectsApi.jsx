@@ -6,4 +6,6 @@ export const projectsApi = {
   get: (id) => api.get(`/projects/${id}`).then((r) => r.data.project),
   remove: (id) => api.delete(`/projects/${id}`),
   generate: (id) => api.post(`/projects/${id}/generate`).then((r) => r.data.project),
+  selectLayout: (id, index) =>
+    api.post(`/projects/${id}/select-layout`, { index }).then((r) => r.data.project),
 };
