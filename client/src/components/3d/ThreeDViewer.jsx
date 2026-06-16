@@ -1,5 +1,7 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import ThreeDWalkthrough from "./ThreeDWalkthrough";
 
 const ROOM_COLORS = {
   bedroom: "#9DD7F0",
@@ -45,6 +47,7 @@ function getMetrics(layout, project) {
 
   const buildableWidth = safeNumber(dims.buildableWidth, 0) || safeNumber(buildable.width, plotWidth);
   const buildableLength = safeNumber(dims.buildableLength, 0) || safeNumber(buildable.length, plotLength);
+
   const originX = safeNumber(buildable.min_x ?? buildable.offsetX, 0);
   const originY = safeNumber(buildable.min_y ?? buildable.offsetY, 0);
 
@@ -144,8 +147,8 @@ function addWindow(group, x, y, z, w, h, direction, label = "") {
   });
   const frame = makeMat("#334155", { roughness: 0.55 });
   const depth = 0.035;
-  const isXFace = direction === "east" || direction === "west";
 
+  const isXFace = direction === "east" || direction === "west";
   addBox(group, {
     x,
     y,
@@ -175,8 +178,10 @@ function addDoor(group, x, y, z, w, h, direction) {
   const doorMat = makeMat("#A86432", { roughness: 0.62 });
   const trimMat = makeMat("#3F2A1B", { roughness: 0.7 });
   const depth = 0.05;
+
   const isXFace = direction === "east" || direction === "west";
   addBox(group, { x, y, z, w: isXFace ? depth : w, h, d: isXFace ? w : depth, mat: doorMat });
+
   if (isXFace) {
     addBox(group, { x, y: y + h / 2, z, w: depth * 1.2, h: 0.06, d: w + 0.12, mat: trimMat, cast: false });
   } else {
@@ -265,6 +270,7 @@ function buildModel({ scene, model, layout, project, options }) {
       const roomZ = (safeNumber(room.y, 0) - model.metrics.originY + safeNumber(room.height, 1) / 2 - model.metrics.buildableLength / 2) * s;
       const color = ROOM_COLORS[room.type] || ROOM_COLORS.other;
       const mat = makeMat(color, { roughness: 0.78, transparent: true, opacity: options.roomColors ? 0.72 : 0.18 });
+
       addBox(floorGroup, { x: roomX, y: yBase + slabT + 0.012, z: roomZ, w: Math.max(0.05, roomW - wallT), h: 0.025, d: Math.max(0.05, roomL - wallT), mat, cast: false, receive: true });
       if (options.labels && floor === 0) {
         addLabel(floorGroup, room.name || room.label || room.type || `Room ${i + 1}`, new THREE.Vector3(roomX, yBase + 0.08, roomZ), "#0f172a");
@@ -275,6 +281,7 @@ function buildModel({ scene, model, layout, project, options }) {
     const frontWallH = options.cutaway ? floorH * 0.33 : floorH;
     const frontMat = options.cutaway ? makeMat("#F5F3EE", { transparent: true, opacity: 0.45, roughness: 0.74 }) : materials.whiteWall;
     const rearMat = floor % 2 === 0 ? materials.whiteWall : materials.accentWall;
+
     addBox(floorGroup, { x: 0, y: yBase + frontWallH / 2, z: bL / 2 - wallT / 2, w: bW, h: frontWallH, d: wallT, mat: frontMat, name: "front wall" });
     addBox(floorGroup, { x: 0, y: yBase + floorH / 2, z: -bL / 2 + wallT / 2, w: bW, h: floorH, d: wallT, mat: rearMat, name: "rear wall" });
     addBox(floorGroup, { x: -bW / 2 + wallT / 2, y: yBase + floorH / 2, z: 0, w: wallT, h: floorH, d: bL, mat: materials.whiteWall, name: "left wall" });
@@ -289,10 +296,12 @@ function buildModel({ scene, model, layout, project, options }) {
           const y1 = safeNumber(wall.y1 ?? wall.start?.y, 0) - model.metrics.originY - model.metrics.buildableLength / 2;
           const x2 = safeNumber(wall.x2 ?? wall.end?.x, x1) - model.metrics.originX - model.metrics.buildableWidth / 2;
           const y2 = safeNumber(wall.y2 ?? wall.end?.y, y1) - model.metrics.originY - model.metrics.buildableLength / 2;
+
           const minX = (Math.min(x1, x2) + Math.abs(x2 - x1) / 2) * s;
           const minZ = (Math.min(y1, y2) + Math.abs(y2 - y1) / 2) * s;
           const ww = Math.max(wallT * 0.8, Math.abs(x2 - x1) * s || wallT);
           const dd = Math.max(wallT * 0.8, Math.abs(y2 - y1) * s || wallT);
+
           addBox(floorGroup, { x: minX, y: yBase + floorH * 0.42, z: minZ, w: ww, h: floorH * 0.84, d: dd, mat: materials.internalWall, name: "internal wall" });
         });
       } else {
@@ -301,6 +310,7 @@ function buildModel({ scene, model, layout, project, options }) {
           const rl = safeNumber(room.height, 1) * s;
           const rx = (safeNumber(room.x, 0) - model.metrics.originX + safeNumber(room.width, 1) / 2 - model.metrics.buildableWidth / 2) * s;
           const rz = (safeNumber(room.y, 0) - model.metrics.originY + safeNumber(room.height, 1) / 2 - model.metrics.buildableLength / 2) * s;
+
           addBox(floorGroup, { x: rx, y: yBase + floorH * 0.36, z: rz - rl / 2, w: rw, h: floorH * 0.72, d: wallT * 0.65, mat: materials.internalWall, name: "room partition" });
           addBox(floorGroup, { x: rx - rw / 2, y: yBase + floorH * 0.36, z: rz, w: wallT * 0.65, h: floorH * 0.72, d: rl, mat: materials.internalWall, name: "room partition" });
         });
@@ -322,6 +332,7 @@ function buildModel({ scene, model, layout, project, options }) {
         const ox = (safeNumber(opening.x, 0) - model.metrics.originX - model.metrics.buildableWidth / 2) * s;
         const oz = (safeNumber(opening.y, 0) - model.metrics.originY - model.metrics.buildableLength / 2) * s;
         const ow = clamp(safeNumber(opening.width, kind === "door" ? 3 : 4) * s, 0.45, 1.6);
+
         if (kind === "door") {
           addDoor(floorGroup, ox, yBase + floorH * 0.34, oz, ow, floorH * 0.68, direction);
         } else {
@@ -349,6 +360,7 @@ function buildModel({ scene, model, layout, project, options }) {
   const topY = model.floors * (floorH + floorGap) - floorGap;
   addBox(house, { x: 0, y: topY + slabT / 2, z: 0, w: bW + 0.16, h: slabT, d: bL + 0.16, mat: materials.roof, name: "roof" });
   const parapetH = 0.42;
+
   addBox(house, { x: 0, y: topY + parapetH / 2, z: bL / 2 - wallT / 2, w: bW, h: parapetH, d: wallT, mat: materials.parapet });
   addBox(house, { x: 0, y: topY + parapetH / 2, z: -bL / 2 + wallT / 2, w: bW, h: parapetH, d: wallT, mat: materials.parapet });
   addBox(house, { x: -bW / 2 + wallT / 2, y: topY + parapetH / 2, z: 0, w: wallT, h: parapetH, d: bL, mat: materials.parapet });
@@ -362,6 +374,7 @@ function buildModel({ scene, model, layout, project, options }) {
     const roofGroup = new THREE.Group();
     roofGroup.position.set(0, topY + 0.14, -bL * 0.06);
     house.add(roofGroup);
+
     const roofMat = makeMat("#374151", { roughness: 0.5 });
     const roofGeo = new THREE.ConeGeometry(Math.max(bW, bL) * 0.42, 1.1, 4);
     const roofMesh = new THREE.Mesh(roofGeo, roofMat);
@@ -376,6 +389,7 @@ function buildModel({ scene, model, layout, project, options }) {
   addTree(root, -pW / 2 + 1.0, -pL / 2 + 1.2, 0.9);
   addTree(root, pW / 2 - 1.1, -pL / 2 + 1.0, 1.05);
   addTree(root, pW / 2 - 1.2, pL / 2 - 2.0, 0.75);
+
   const shrubMat = makeMat("#4D7C0F", { roughness: 0.9 });
   for (let i = 0; i < 12; i += 1) {
     const x = -pW / 2 + 0.7 + i * (pW - 1.4) / 11;
@@ -415,6 +429,7 @@ export default function ThreeDViewer({ project, layout }) {
     const hasGarage = Boolean(brief.hasGarage || rooms.some((r) => r.type === "garage"));
     const worldScale = clamp(16 / Math.max(metrics.plotWidth, metrics.plotLength, 30), 0.16, 0.38);
     const totalArea = rooms.reduce((sum, room) => sum + safeNumber(room.width, 0) * safeNumber(room.height, 0), 0);
+
     return { brief, metrics, rooms, floors, floorHeightFt, hasGarage, worldScale, totalArea };
   }, [layout, project]);
 
@@ -440,12 +455,14 @@ export default function ThreeDViewer({ project, layout }) {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.04;
+
     mount.innerHTML = "";
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     // Lights
     scene.add(new THREE.HemisphereLight("#E0F2FE", "#7C5A3A", 1.55));
+
     const sun = new THREE.DirectionalLight("#FFFFFF", 2.25);
     sun.position.set(-8, 15, 10);
     sun.castShadow = true;
@@ -500,6 +517,7 @@ export default function ThreeDViewer({ project, layout }) {
         this.walkPos.set(0, 1.55, Math.max(2.2, model.metrics.buildableLength * model.worldScale * 0.28));
       },
     };
+
     controlsRef.current = controls;
 
     const setOrbitCamera = () => {
@@ -574,6 +592,7 @@ export default function ThreeDViewer({ project, layout }) {
         e.preventDefault();
       }
     };
+
     const onKeyUp = (e) => {
       controls.keys[e.key.toLowerCase()] = false;
     };
@@ -588,6 +607,7 @@ export default function ThreeDViewer({ project, layout }) {
 
     let raf = 0;
     let last = performance.now();
+
     const animate = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
@@ -597,12 +617,14 @@ export default function ThreeDViewer({ project, layout }) {
         const speed = (controls.keys.shift ? 4.4 : 2.4) * dt;
         const forward = new THREE.Vector3(Math.sin(controls.yaw), 0, Math.cos(controls.yaw));
         const right = new THREE.Vector3(Math.cos(controls.yaw), 0, -Math.sin(controls.yaw));
+
         if (controls.keys.w || controls.keys.arrowup) controls.walkPos.addScaledVector(forward, speed);
         if (controls.keys.s || controls.keys.arrowdown) controls.walkPos.addScaledVector(forward, -speed);
         if (controls.keys.d || controls.keys.arrowright) controls.walkPos.addScaledVector(right, speed);
         if (controls.keys.a || controls.keys.arrowleft) controls.walkPos.addScaledVector(right, -speed);
         if (controls.keys.q) controls.walkPos.y = clamp(controls.walkPos.y - speed, 0.8, 12);
         if (controls.keys.e) controls.walkPos.y = clamp(controls.walkPos.y + speed, 0.8, 12);
+
         const limitX = model.metrics.plotWidth * model.worldScale * 0.62;
         const limitZ = model.metrics.plotLength * model.worldScale * 0.62;
         controls.walkPos.x = clamp(controls.walkPos.x, -limitX, limitX);
@@ -616,6 +638,7 @@ export default function ThreeDViewer({ project, layout }) {
       renderer.render(scene, camera);
       raf = requestAnimationFrame(animate);
     };
+
     raf = requestAnimationFrame(animate);
 
     return () => {
@@ -627,6 +650,7 @@ export default function ThreeDViewer({ project, layout }) {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+
       scene.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
@@ -635,6 +659,7 @@ export default function ThreeDViewer({ project, layout }) {
         }
         if (obj.material?.map) obj.material.map.dispose?.();
       });
+
       renderer.dispose();
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
@@ -708,9 +733,8 @@ export default function ThreeDViewer({ project, layout }) {
         }
       `}</style>
 
-      <section className="bm3d-render-card">
+      <section className="bm3d-render-card" data-tour="scene">
         <div ref={mountRef} className="bm3d-render-mount" />
-
         <div className="bm3d-top-hud">
           <div className="bm3d-badge">
             <span style={{ width: 9, height: 9, borderRadius: 999, background: "#22C55E", boxShadow: "0 0 14px #22C55E" }} />
@@ -721,8 +745,7 @@ export default function ThreeDViewer({ project, layout }) {
             <p style={{ margin: "0.25rem 0 0", color: "#475569", fontSize: "0.78rem", fontWeight: 700 }}>Drag to look around. Switch to Walkthrough for inside movement.</p>
           </div>
         </div>
-
-        <div className="bm3d-bottom-help">
+        <div className="bm3d-bottom-help" data-tour="helper-chips">
           {mode === "walk" ? (
             <>
               <span className="bm3d-help-chip">W/A/S/D or arrows: move</span>
@@ -749,12 +772,38 @@ export default function ThreeDViewer({ project, layout }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".55rem" }}>
+        <button
+          type="button"
+          className="bm3d-btn bm3d-primary"
+          style={{ width: "100%", marginBottom: ".65rem" }}
+          onClick={() => window.dispatchEvent(new Event("buildmate:open-3d-guide"))}
+        >
+          ✨ Start 3D Guide
+        </button>
+
+        <div
+          data-tour="mode-controls"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: ".55rem",
+            position: "relative",
+          }}
+        >
           <button className={`bm3d-btn ${mode === "orbit" ? "bm3d-primary" : "bm3d-secondary"}`} onClick={() => setMode("orbit")}>🛰️ Orbit</button>
           <button className={`bm3d-btn ${mode === "walk" ? "bm3d-primary" : "bm3d-secondary"}`} onClick={() => setMode("walk")}>🚶 Walkthrough</button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".55rem", marginTop: ".6rem" }}>
+        <div
+          data-tour="reset-controls"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: ".55rem",
+            marginTop: ".6rem",
+            position: "relative",
+          }}
+        >
           <button className="bm3d-btn bm3d-secondary" onClick={resetCamera}>↺ Reset</button>
           <button className="bm3d-btn bm3d-secondary" onClick={takeScreenshot}>📸 PNG</button>
         </div>
@@ -773,7 +822,15 @@ export default function ThreeDViewer({ project, layout }) {
           ))}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: ".55rem" }}>
+        <div
+          data-tour="visual-toggles"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: ".55rem",
+            position: "relative",
+          }}
+        >
           <Toggle checked={cutaway} onChange={setCutaway} label="Dollhouse cutaway view" />
           <Toggle checked={exploded} onChange={setExploded} label="Exploded floors" />
           <Toggle checked={labels} onChange={setLabels} label="Room labels" />
@@ -794,6 +851,8 @@ export default function ThreeDViewer({ project, layout }) {
           This viewer creates a real WebGL 3D house from the selected generated layout. For a more realistic final render, keep <strong>Dollhouse cutaway</strong> off; for walkthrough/interior checking, keep it on.
         </div>
       </aside>
+
+      <ThreeDWalkthrough />
     </div>
   );
 }
