@@ -113,7 +113,7 @@ export default function Dashboard() {
             { icon:"🏗️", num: projects.length, label:"Total Projects", trend:"↑ Active", color:"rgba(30,136,229,0.15)" },
             { icon:"✅", num: completed,        label:"Completed",      trend:"↑ Generated", color:"rgba(76,175,80,0.15)" },
             { icon:"⚡", num: drafts,           label:"Drafts",         trend:"In progress", color:"rgba(255,152,0,0.15)" },
-            { icon:"📐", num: projects.reduce((s,p)=>s+(p.layoutVariants?.length||0),0), label:"Layouts Generated", trend:"↑ This session", color:"rgba(0,188,212,0.15)" },
+            { icon:"📐", num: projects.reduce((s,p)=>s+(p.layoutVariants?.length||0),0), label:"Floor plan Layouts Generated", trend:"↑ This session", color:"rgba(0,188,212,0.15)" },
           ].map((s,i) => (
             <div key={i} style={{ ...glass, padding:"1.25rem 1.4rem", display:"flex", flexDirection:"column", gap:"0.5rem", transition:"all 0.3s", cursor:"default" }}
               onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-4px)"; e.currentTarget.style.boxShadow="0 20px 48px rgba(0,0,0,0.1),inset 0 1px 0 rgba(255,255,255,0.7)"; }}
@@ -242,7 +242,7 @@ export default function Dashboard() {
               <div style={{ padding:"1rem 1.25rem", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.65rem" }}>
                 {[
                   { icon:"🏠", label:"New House",      path:"/projects/new" },
-                  { icon:"🏢", label:"New Apartment",  path:"/projects/new" },
+                  { icon:"🏢", label:"Review",  path:"/projects/new" },
                   { icon:"📐", label:"View Projects",  path:"/dashboard"    },
                   { icon:"⚡", label:"Recent",         path:"/dashboard"    },
                 ].map((a) => (

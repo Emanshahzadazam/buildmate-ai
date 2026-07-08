@@ -11,6 +11,7 @@ const ROOM_COLORS = {
   garage:    "#F0F0F0",
   store:     "#F5F5F5",
   staircase: "#EFEFEF",
+  corridor:  "#F7F7F5",
   other:     "#FAFAFA",
 };
 
@@ -50,14 +51,17 @@ export default function FloorPlanCanvas({ layout, projectName }) {
   );
 }
 
-/* ── All drawing logic below is UNCHANGED ── */
+/* ── Drawing logic — same visual output as before, with defensive guards
+   added so a layout missing an optional field (e.g. an older record saved
+   before `wallId` was required, or a variant with no openings/rooms yet)
+   degrades gracefully instead of throwing mid-render. ── */
 
 function getMetrics(layout) {
-  const plot     = layout.plot      || {};
-  const dims     = layout.dimensions || {};
+  const plot      = layout.plot       || {};
+  const dims      = layout.dimensions || {};
   const buildable = layout.buildable  || {};
-  const plotWidth  = dims.plotWidth  || plot.width  || plot.plotWidth  || buildable.width  + 2 || 40;
-  const plotLength = dims.plotLength || plot.length || plot.plotLength || buildable.length + 2 || 70;
+  const plotWidth  = dims.plotWidth  || plot.width  || plot.plotWidth  || (buildable.width  || 0) + 2 || 40;
+  const plotLength = dims.plotLength || plot.length || plot.plotLength || (buildable.length || 0) + 2 || 70;
   return {
     plotWidth,
     plotLength,
@@ -69,6 +73,7 @@ function getMetrics(layout) {
 }
 
 function drawOpening(ctx, opening, originX, originY, scale) {
+  if (!opening) return;
   const x     = originX + (opening.x     || 0) * scale;
   const y     = originY + (opening.y     || 0) * scale;
   const width = (opening.width || 3) * scale;
@@ -131,7 +136,7 @@ function drawOpening(ctx, opening, originX, originY, scale) {
 }
 
 function drawArchitecturalFloorPlan(ctx, layout, canvasWidth, canvasHeight, projectName) {
-  if (!layout.rooms || layout.rooms.length === 0) {
+  if (!layout || !Array.isArray(layout.rooms) || layout.rooms.length === 0) {
     ctx.fillStyle = "#94a3b8"; ctx.font = "16px Arial"; ctx.textAlign = "center";
     ctx.fillText("No layout data available", canvasWidth / 2, canvasHeight / 2);
     return;
@@ -167,8 +172,9 @@ function drawArchitecturalFloorPlan(ctx, layout, canvasWidth, canvasHeight, proj
 
   // Rooms
   for (const room of layout.rooms) {
-    const x = offsetX + room.x * scale, y = offsetY + room.y * scale;
-    const w = room.width * scale,       h = room.height * scale;
+    if (!room) continue;
+    const x = offsetX + (room.x || 0) * scale, y = offsetY + (room.y || 0) * scale;
+    const w = (room.width || 0) * scale,       h = (room.height || 0) * scale;
     ctx.fillStyle = ROOM_COLORS[room.type] || room.color || "#F5F5F5";
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = "#666666"; ctx.lineWidth = 1.5;
@@ -182,15 +188,19 @@ function drawArchitecturalFloorPlan(ctx, layout, canvasWidth, canvasHeight, proj
 
   // Room labels
   for (const room of layout.rooms) {
-    const x = offsetX + room.x * scale, y = offsetY + room.y * scale;
-    const w = room.width * scale,       h = room.height * scale;
+    if (!room) continue;
+    const x = offsetX + (room.x || 0) * scale, y = offsetY + (room.y || 0) * scale;
+    const w = (room.width || 0) * scale,       h = (room.height || 0) * scale;
     const cx = x + w / 2, cy = y + h / 2;
+    const roomWidth  = room.width  || 0;
+    const roomHeight = room.height || 0;
+    const roomType   = room.type || "other";
     ctx.fillStyle = "#17324D"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(room.name || room.label || room.type.toUpperCase(), cx, cy - 8);
+    ctx.fillText(room.name || room.label || roomType.toUpperCase(), cx, cy - 8);
     ctx.fillStyle = "#334155"; ctx.font = "10px Arial";
-    ctx.fillText(`${room.width.toFixed(1)}' × ${room.height.toFixed(1)}'`, cx, cy + 8);
+    ctx.fillText(`${roomWidth.toFixed(1)}' × ${roomHeight.toFixed(1)}'`, cx, cy + 8);
     ctx.font = "9px Arial"; ctx.fillStyle = "#666";
-    ctx.fillText(`${(room.width * room.height).toFixed(0)} sqft`, cx, cy + 21);
+    ctx.fillText(`${(roomWidth * roomHeight).toFixed(0)} sqft`, cx, cy + 21);
   }
 
   // North arrow
@@ -220,9 +230,9 @@ function drawArchitecturalFloorPlan(ctx, layout, canvasWidth, canvasHeight, proj
 
   // Title block
   ctx.fillStyle = "#111"; ctx.font = "bold 13px Arial"; ctx.textAlign = "left";
-  ctx.fillText(`FLOOR PLAN - LAYOUT ${layout.variant || "A"}`, offsetX, 25);
+  ctx.fillText(`FLOOR PLAN - LAYOUT ${layout.variant || "A"}${layout.variantName ? " · " + layout.variantName : ""}`, offsetX, 25);
   ctx.font = "10px Arial"; ctx.fillStyle = "#444";
-  ctx.fillText(`Project: ${projectName}`, offsetX, 40);
+  ctx.fillText(`Project: ${projectName || "Untitled"}`, offsetX, 40);
   ctx.fillText(`Scale: auto-fit | Plot: ${metrics.plotWidth.toFixed(1)}' × ${metrics.plotLength.toFixed(1)}'`, offsetX, 54);
 
   // Legend

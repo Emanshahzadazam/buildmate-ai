@@ -1,56 +1,63 @@
 import { useEffect, useMemo, useState } from "react";
 
-const TOUR_KEY = "buildmate-3d-walkthrough-complete-v2";
+const TOUR_KEY = "buildmate-3d-walkthrough-complete-v4";
 
 const steps = [
   {
     icon: "🏠",
     title: "Your 3D house model",
-    body: "This is the generated 3D house built from your selected layout: rooms, walls, floors, roof, doors, and windows.",
+    body: "This is the generated 3D house built from your selected layout, including rooms, walls, floors, roof, doors, windows, and exterior space.",
     target: "[data-tour='scene']",
     accent: "#06B6D4",
   },
   {
     icon: "🛰️",
-    title: "Orbit around the house",
-    body: "In Orbit mode, drag on the model to rotate and use the mouse wheel or trackpad to zoom in and out.",
+    title: "Orbit mode",
+    body: "Use Orbit to inspect the house from outside. Drag to rotate around it and use the mouse wheel or trackpad to zoom in and out.",
     target: "[data-tour='mode-controls']",
     accent: "#7C3AED",
   },
   {
     icon: "🚶",
-    title: "Walkthrough mode",
-    body: "Switch to Walkthrough when you want to move like you are standing inside or in front of the house. Use W/A/S/D and drag to look.",
+    title: "Walk mode",
+    body: "Walk mode places you near the house entry so you can move more naturally. Use W, A, S, D or arrow keys to move, and drag to look around.",
     target: "[data-tour='mode-controls']",
     accent: "#F97316",
   },
   {
-    icon: "↺",
-    title: "Reset the camera anytime",
-    body: "If the view feels lost, too close, or rotated badly, press Reset to return to a comfortable default camera position.",
-    target: "[data-tour='reset-controls']",
+    icon: "🚪",
+    title: "Corrected front entry",
+    body: "The 3D viewer now prefers the front side from garage or entrance-related rooms first, so the tour starts from the more realistic front of the house.",
+    target: "[data-tour='scene']",
     accent: "#22C55E",
   },
   {
+    icon: "▶️",
+    title: "Auto Tour mode",
+    body: "Auto Tour starts outside, approaches the main entry, enters the house, and then visits important rooms one by one.",
+    target: "[data-tour='tour-controls']",
+    accent: "#14B8A6",
+  },
+  {
     icon: "🧱",
-    title: "Understand the building layers",
-    body: "These toggles help you inspect walls, rooms, openings, labels, floor separation, and the cutaway dollhouse view.",
+    title: "Visual and inspection controls",
+    body: "Use these toggles for cutaway view, exploded floors, room labels, doors, windows, internal walls, furniture, and smoother collision behavior.",
     target: "[data-tour='visual-toggles']",
     accent: "#0EA5E9",
   },
   {
-    icon: "💡",
-    title: "Room highlights and details",
-    body: "Room colors, labels, doors, and windows make the layout easier to read. Turn them on or off depending on your presentation style.",
-    target: "[data-tour='visual-toggles']",
+    icon: "📱",
+    title: "Better page layout",
+    body: "On smaller screens, some controls move below the viewer so the page feels more balanced and the 3D area gets more space.",
+    target: "[data-tour='scene']",
     accent: "#A855F7",
   },
   {
     icon: "⌨️",
-    title: "Tiny control hints",
-    body: "Use the helper chips at the bottom as a quick reminder. Orbit is best for overview; Walkthrough is best for exploring inside.",
+    title: "Quick control hints",
+    body: "The chips at the bottom update depending on the mode, so users always see the right movement or tour hints.",
     target: "[data-tour='helper-chips']",
-    accent: "#14B8A6",
+    accent: "#F59E0B",
   },
 ];
 
@@ -79,11 +86,23 @@ export default function ThreeDWalkthrough() {
 
   useEffect(() => {
     const completed = window.localStorage.getItem(TOUR_KEY) === "true";
+
     const timer = window.setTimeout(() => {
       setReady(true);
       if (!completed) setOpen(true);
     }, 500);
-    return () => window.clearTimeout(timer);
+
+    const openHandler = () => {
+      setStepIndex(0);
+      setOpen(true);
+    };
+
+    window.addEventListener("buildmate:open-3d-guide", openHandler);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("buildmate:open-3d-guide", openHandler);
+    };
   }, []);
 
   useEffect(() => {
@@ -96,6 +115,7 @@ export default function ThreeDWalkthrough() {
 
     update();
     const raf = window.requestAnimationFrame(update);
+
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
 
@@ -108,11 +128,13 @@ export default function ThreeDWalkthrough() {
 
   useEffect(() => {
     if (!open) return undefined;
+
     const onKey = (event) => {
       if (event.key === "Escape") finish(false);
       if (event.key === "ArrowRight") next();
       if (event.key === "ArrowLeft") back();
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
@@ -120,8 +142,8 @@ export default function ThreeDWalkthrough() {
   const cardPosition = useMemo(() => {
     const width = typeof window !== "undefined" ? window.innerWidth : 1200;
     const height = typeof window !== "undefined" ? window.innerHeight : 800;
-    const cardW = width < 560 ? width - 28 : 390;
-    const cardH = 310;
+    const cardW = width < 560 ? width - 28 : 410;
+    const cardH = 334;
 
     if (!rect || width < 760) {
       return {
@@ -210,6 +232,7 @@ export default function ThreeDWalkthrough() {
           box-shadow: 0 18px 40px rgba(15,23,42,.22);
           backdrop-filter: blur(14px);
         }
+
         .bm3d-tour-highlight {
           position: fixed;
           z-index: 70;
@@ -218,11 +241,12 @@ export default function ThreeDWalkthrough() {
           border-radius: 26px;
           transition: left .34s ease, top .34s ease, width .34s ease, height .34s ease, opacity .24s ease, box-shadow .34s ease;
         }
+
         .bm3d-tour-card {
           position: fixed;
           z-index: 75;
           border-radius: 28px;
-          background: rgba(255,255,255,.91);
+          background: rgba(255,255,255,.93);
           border: 1px solid rgba(255,255,255,.72);
           box-shadow: 0 28px 90px rgba(15,23,42,.24), inset 0 1px 0 rgba(255,255,255,.9);
           backdrop-filter: blur(24px) saturate(180%);
@@ -230,7 +254,12 @@ export default function ThreeDWalkthrough() {
           transition: left .34s ease, top .34s ease, transform .24s ease, opacity .24s ease;
           animation: bm3dTourIn .26s ease both;
         }
-        @keyframes bm3dTourIn { from { opacity:0; transform: translateY(10px) scale(.98); } to { opacity:1; transform: translateY(0) scale(1); } }
+
+        @keyframes bm3dTourIn {
+          from { opacity:0; transform: translateY(10px) scale(.98); }
+          to { opacity:1; transform: translateY(0) scale(1); }
+        }
+
         .bm3d-tour-icon {
           width: 42px;
           height: 42px;
@@ -242,18 +271,21 @@ export default function ThreeDWalkthrough() {
           box-shadow: 0 12px 26px rgba(15,23,42,.18);
           flex: 0 0 auto;
         }
+
         .bm3d-tour-progress {
           display: grid;
-          grid-template-columns: repeat(7, 1fr);
+          grid-template-columns: repeat(8, 1fr);
           gap: 5px;
           margin: .9rem 0 .8rem;
         }
+
         .bm3d-tour-dot {
           height: 5px;
           border-radius: 999px;
           background: rgba(148,163,184,.28);
           overflow: hidden;
         }
+
         .bm3d-tour-dot span {
           display: block;
           height: 100%;
@@ -261,6 +293,7 @@ export default function ThreeDWalkthrough() {
           background: linear-gradient(90deg,#7C3AED,#06B6D4);
           transition: width .28s ease;
         }
+
         .bm3d-tour-btn {
           border: none;
           border-radius: 999px;
@@ -271,6 +304,7 @@ export default function ThreeDWalkthrough() {
           cursor: pointer;
           transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
         }
+
         .bm3d-tour-btn:hover { transform: translateY(-1px); }
         .bm3d-tour-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
         .bm3d-tour-primary { color:white; background:linear-gradient(135deg,#7C3AED,#06B6D4); box-shadow:0 10px 24px rgba(124,58,237,.25); }
@@ -278,6 +312,7 @@ export default function ThreeDWalkthrough() {
         .bm3d-tour-link { color:#64748B; background:transparent; padding:.62rem .2rem; }
         .bm3d-tour-check { display:flex; align-items:center; gap:.45rem; color:#64748B; font-size:.74rem; font-weight:800; cursor:pointer; user-select:none; }
         .bm3d-tour-check input { accent-color:#7C3AED; }
+
         @media (max-width: 760px) {
           .bm3d-tour-launcher { right: 14px; bottom: 14px; padding:.62rem .82rem; }
           .bm3d-tour-highlight { border-radius: 20px; }
@@ -300,10 +335,29 @@ export default function ThreeDWalkthrough() {
                 {step.icon}
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ margin: "0 0 .15rem", fontSize: ".68rem", textTransform: "uppercase", letterSpacing: ".08em", color: step.accent, fontWeight: 950 }}>
+                <p
+                  style={{
+                    margin: "0 0 .15rem",
+                    fontSize: ".68rem",
+                    textTransform: "uppercase",
+                    letterSpacing: ".08em",
+                    color: step.accent,
+                    fontWeight: 950,
+                  }}
+                >
                   Step {stepIndex + 1} of {steps.length}
                 </p>
-                <h3 style={{ margin: 0, color: "#0f172a", fontFamily: "'Syne',sans-serif", fontSize: "1.08rem", lineHeight: 1.15, fontWeight: 950, letterSpacing: "-.035em" }}>
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#0f172a",
+                    fontFamily: "'Syne',sans-serif",
+                    fontSize: "1.08rem",
+                    lineHeight: 1.15,
+                    fontWeight: 950,
+                    letterSpacing: "-.035em",
+                  }}
+                >
                   {step.title}
                 </h3>
               </div>
@@ -326,9 +380,14 @@ export default function ThreeDWalkthrough() {
                 <input type="checkbox" checked={dontShowAgain} onChange={(e) => setDontShowAgain(e.target.checked)} />
                 Do not show again
               </label>
+
               <div style={{ display: "flex", gap: ".45rem", alignItems: "center", marginLeft: "auto" }}>
-                <button type="button" className="bm3d-tour-btn bm3d-tour-link" onClick={skip}>Skip</button>
-                <button type="button" className="bm3d-tour-btn bm3d-tour-ghost" onClick={back} disabled={stepIndex === 0}>Back</button>
+                <button type="button" className="bm3d-tour-btn bm3d-tour-link" onClick={skip}>
+                  Skip
+                </button>
+                <button type="button" className="bm3d-tour-btn bm3d-tour-ghost" onClick={back} disabled={stepIndex === 0}>
+                  Back
+                </button>
                 <button type="button" className="bm3d-tour-btn bm3d-tour-primary" onClick={next}>
                   {isLast ? "Got it" : "Next"}
                 </button>

@@ -1,6 +1,33 @@
 """
 Professional Architectural Floor Plan Generator
 Validates requirements and generates realistic layouts
+
+This is the "full-featured" generator: it validates feasibility first,
+then produces 3 distinct architectural variants (A/B/C), each with a
+real corridor + bathroom wing so no bedroom is ever sealed off or
+reachable only by walking through another bedroom.
+
+v4 changes (this revision):
+  1. Rooms placed side-by-side in a shared band (front row of variant A,
+     service row of variant B, etc.) now use flexible/proportional width
+     distribution ported from BuildMate v6's JS `buildLayout()` engine:
+     fixed-width rooms (garage, staircase) claim their share first, and
+     every other room in that row splits the remaining width equally —
+     instead of hard-coded percentages. See `_place_row()`.
+  2. Root fix for the wallId crash. `_add_wall()` now dedupes by
+     coordinates and always returns a real id. `_add_opening()` no longer
+     accepts a blank wallId "for now, fill it in later" — if none is
+     supplied it synthesizes a real wall record from the opening's own
+     coordinates (`_synth_wall_for_opening`) and uses that id instead.
+     `_add_interior_door()` used to hard-code `wall_id=""`; it no longer
+     can, because `_add_opening()` will not let it. Every opening this
+     generator produces now has a guaranteed non-empty wallId, which is
+     what Mongoose's `required: true` on that field expects:
+         Project validation failed: layout.openings.0.wallId: Path
+         `wallId` is required.
+  3. Everything else — the 3 architectural strategies, the corridor +
+     bathroom wing, the roof view — is unchanged in spirit, just routed
+     through the fixed wall/opening plumbing above.
 """
 import math
 import uuid
@@ -146,6 +173,9 @@ class ProfessionalLayoutGenerator:
         self.max_y = self.start_y + self.buildable_length
 
         self.wall_ids: Dict[str, str] = {}
+        # coordinate -> wall id, so repeated segments (and openings on the
+        # same segment) reuse a single wall record instead of creating dupes
+        self._wall_registry: Dict[Tuple[float, float, float, float], str] = {}
 
     def _room_count(self, room_type: str) -> int:
         return int(self.analysis["room_counts"].get(room_type, 0) or 0)
@@ -179,6 +209,10 @@ class ProfessionalLayoutGenerator:
         self.rooms.append(room)
         return room
 
+    @staticmethod
+    def _wall_key(x1: float, y1: float, x2: float, y2: float) -> Tuple[float, float, float, float]:
+        return (round(min(x1, x2), 2), round(min(y1, y2), 2), round(max(x1, x2), 2), round(max(y1, y2), 2))
+
     def _add_wall(
         self,
         x1: float,
@@ -189,6 +223,18 @@ class ProfessionalLayoutGenerator:
         direction: str = "custom",
         is_external: bool = False,
     ) -> Dict[str, Any]:
+        """Creates a wall record, or reuses an existing one at the same
+        coordinates. Always returns a wall with a real, non-empty id —
+        this is the building block that makes a blank wallId impossible."""
+        key = self._wall_key(x1, y1, x2, y2)
+        existing_id = self._wall_registry.get(key)
+        if existing_id:
+            wall = next((w for w in self.walls if w["id"] == existing_id), None)
+            if wall is not None:
+                if is_external:
+                    self.wall_ids[direction] = wall["id"]
+                return wall
+
         wall = {
             "id": str(uuid.uuid4()),
             "x1": round(x1, 3),
@@ -201,9 +247,21 @@ class ProfessionalLayoutGenerator:
             "isExternal": is_external,
         }
         self.walls.append(wall)
+        self._wall_registry[key] = wall["id"]
         if is_external:
             self.wall_ids[direction] = wall["id"]
         return wall
+
+    def _synth_wall_for_opening(self, direction: str, x: float, y: float, width: float) -> str:
+        """Builds (or reuses) a small interior wall record spanning the
+        exact segment an opening sits on. Used whenever an opening is
+        created without an explicit wall_id, so `wallId` is never blank."""
+        half = max(0.5, width) / 2.0
+        if direction in ("north", "south"):
+            wall = self._add_wall(x - half, y, x + half, y, kind="interior", direction=direction)
+        else:  # west / east
+            wall = self._add_wall(x, y - half, x, y + half, kind="interior", direction=direction)
+        return wall["id"]
 
     def _add_opening(
         self,
@@ -215,8 +273,13 @@ class ProfessionalLayoutGenerator:
         wall_id: str,
         sill_height: float = 0.0,
         label: str = "",
+        explicit_x: float = None,
+        explicit_y: float = None,
     ) -> Dict[str, Any]:
-        if direction == "north":
+        if explicit_x is not None and explicit_y is not None:
+            x = explicit_x
+            y = explicit_y
+        elif direction == "north":
             x = self.min_x + offset
             y = self.min_y
         elif direction == "south":
@@ -228,6 +291,10 @@ class ProfessionalLayoutGenerator:
         else:  # east
             x = self.max_x
             y = self.min_y + offset
+
+        # Guarantee a real wallId — never persist an empty string.
+        if not wall_id:
+            wall_id = self._synth_wall_for_opening(direction, x, y, width)
 
         opening = {
             "id": str(uuid.uuid4()),
@@ -245,6 +312,73 @@ class ProfessionalLayoutGenerator:
         }
         self.openings.append(opening)
         return opening
+
+    def _add_interior_door(
+        self,
+        x: float,
+        y: float,
+        orientation: str,
+        width: float = 3.0,
+        label: str = "",
+    ) -> Dict[str, Any]:
+        """Adds a door on an INTERIOR partition wall at an explicit (x, y) point.
+
+        orientation="horizontal" -> the wall being pierced runs left-right (like a
+            north/south exterior wall), so the door is drawn as a horizontal gap.
+        orientation="vertical"   -> the wall being pierced runs up-down (like a
+            west/east exterior wall), so the door is drawn as a vertical gap.
+
+        wall_id is intentionally left blank here: _add_opening() will
+        synthesize a real wall record from (x, y, width) via
+        _synth_wall_for_opening(), so this never produces an empty wallId.
+        """
+        direction = "north" if orientation == "horizontal" else "west"
+        return self._add_opening(
+            "door",
+            direction,
+            0,
+            width,
+            6.83,
+            "",
+            0.0,
+            label,
+            explicit_x=x,
+            explicit_y=y,
+        )
+
+    def _place_row(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        items: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Flexible-width row placement, ported from BuildMate v6's JS
+        `buildLayout()` (Step 5): items with a 'fixed_w' claim their share
+        of the row first; every remaining item splits the leftover width
+        equally. Each item dict needs: type, label, name, color, and
+        optionally fixed_w / size_category. Returns the placed rooms with
+        their resolved x/width so callers can add doors/windows on the
+        correct edges.
+        """
+        n = len(items)
+        gaps = max(0, n - 1) * self.wall_int
+        fixed_total = sum(it.get("fixed_w", 0) or 0 for it in items)
+        flex_items = [it for it in items if not it.get("fixed_w")]
+        flex_w = max(6.0, (w - fixed_total - gaps) / len(flex_items)) if flex_items else 0.0
+
+        cx = x
+        placed = []
+        for it in items:
+            iw = it.get("fixed_w") or flex_w
+            room = self._add_room(
+                it.get("label", it["name"]), it["name"], it["type"],
+                cx, y, iw, h, it["color"], it.get("size_category", "default"),
+            )
+            placed.append({**it, "x": cx, "width": iw, "room": room})
+            cx += iw + self.wall_int
+        return placed
 
     def generate(self) -> Dict:
         buildable = self.analysis
@@ -300,7 +434,7 @@ class ProfessionalLayoutGenerator:
             "warnings": self._build_warnings(),
             "analysis": self.analysis,
             "meta": {
-                "generator": "arch-v3",
+                "generator": "arch-v4",
                 "strategy": strategy_name,
                 "floors": int(self.brief.get("floors", 1) or 1),
                 "floorHeight": self.floor_height,
@@ -318,8 +452,97 @@ class ProfessionalLayoutGenerator:
                 warnings.append("Kitchen is compact relative to a realistic family layout.")
         return warnings
 
+    def _generate_bedroom_wing(self, x, zone_y, w, zone_h, style="stacked"):
+        """Shared logic: lays out bedrooms + bathrooms around a real corridor.
+
+        Every bedroom gets a genuine door into a corridor (never just windows),
+        and the corridor itself gets a door connecting back to the rest of the
+        house, so no room is ever sealed off or reachable only by walking
+        through another bedroom.
+
+        style="stacked": used when the private zone is a horizontal band
+            below/behind the public rooms (variants A and C). Layout across
+            the width is [bedrooms | corridor | bathrooms]; the corridor's
+            open end faces the public zone above it (a horizontal doorway at
+            its north end), and bedrooms/bathrooms each get their own vertical
+            door into the corridor.
+
+        style="side": used when the private zone is a vertical band beside
+            the public rooms (variant B). Layout across the width is
+            [corridor | bedrooms | bathrooms]; the corridor's open end faces
+            the public zone beside it (a vertical doorway at its west end),
+            bedrooms get a vertical door into the corridor, and bathrooms are
+            ensuite off their bedroom (a standard, realistic arrangement).
+        """
+        bed_count = max(1, self._room_count("bedroom") or 3)
+        bath_count = max(1, self._room_count("bathroom") or min(2, bed_count))
+
+        corridor_w = min(4.0, max(3.0, min(w, zone_h) * 0.09))
+        bed_w = max(11.0, w * 0.52 if style == "stacked" else (w - corridor_w - self.wall_int) * 0.62)
+        bath_w = max(6.0, w - bed_w - corridor_w - 2 * self.wall_int)
+
+        bed_h = (zone_h - (bed_count - 1) * self.wall_int) / bed_count
+        colors = ["#E0E6F0", "#D4E4F0", "#C8DDFF"]
+
+        if style == "stacked":
+            corridor_x = x + bed_w + self.wall_int
+            bath_x = corridor_x + corridor_w + self.wall_int
+
+            self._add_room("HALL", "Corridor", "corridor", corridor_x, zone_y, corridor_w, zone_h, "#F7F7F5")
+            # Corridor's open end connects north, toward the public zone above it.
+            self._add_interior_door(
+                corridor_x + corridor_w / 2, zone_y, "horizontal",
+                width=min(3.5, corridor_w), label="D-H",
+            )
+
+            for i in range(bed_count):
+                by = zone_y + i * (bed_h + self.wall_int)
+                self._add_room(
+                    "MASTER\nBED" if i == 0 else f"BED {i+1}",
+                    "Master Bedroom" if i == 0 else f"Bedroom {i+1}",
+                    "bedroom", x, by, bed_w, bed_h,
+                    colors[i % len(colors)], "master" if i == 0 else "default",
+                )
+                self._add_interior_door(x + bed_w, by + bed_h / 2, "vertical", width=3.0, label=f"D-B{i+1}")
+
+                if i < bath_count:
+                    self._add_room(f"BATH {i+1}", f"Bathroom {i+1}", "bathroom", bath_x, by, bath_w, bed_h, "#D4E8FF")
+                    self._add_interior_door(bath_x, by + bed_h / 2, "vertical", width=2.6, label=f"D-Ba{i+1}")
+
+        else:  # style == "side"
+            corridor_x = x
+            bed_x = corridor_x + corridor_w + self.wall_int
+            bath_x = bed_x + bed_w + self.wall_int
+
+            self._add_room("HALL", "Corridor", "corridor", corridor_x, zone_y, corridor_w, zone_h, "#F7F7F5")
+            # Corridor's open end connects west, toward the public zone beside it.
+            self._add_interior_door(
+                corridor_x, zone_y + zone_h / 2, "vertical",
+                width=min(3.5, zone_h), label="D-H",
+            )
+
+            for i in range(bed_count):
+                by = zone_y + i * (bed_h + self.wall_int)
+                self._add_room(
+                    "MASTER\nBED" if i == 0 else f"BED {i+1}",
+                    "Master Bedroom" if i == 0 else f"Bedroom {i+1}",
+                    "bedroom", bed_x, by, bed_w, bed_h,
+                    colors[i % len(colors)], "master" if i == 0 else "default",
+                )
+                # Door from corridor straight into the bedroom.
+                self._add_interior_door(bed_x, by + bed_h / 2, "vertical", width=3.0, label=f"D-B{i+1}")
+
+                if i < bath_count:
+                    self._add_room(f"BATH {i+1}", f"Bathroom {i+1}", "bathroom", bath_x, by, bath_w, bed_h, "#D4E8FF")
+                    # Ensuite door: bathroom opens off its own bedroom.
+                    self._add_interior_door(bath_x, by + bed_h / 2, "vertical", width=2.6, label=f"D-Ba{i+1}")
+
+        return corridor_x
+
     def _generate_variant_a(self):
-        """Front-to-back zoning: public -> semi-private -> private"""
+        """Front-to-back zoning: public -> semi-private -> private.
+        Front and mid rows now use flexible/proportional widths (ported
+        from buildmate_v6.html) instead of hard-coded splits."""
         x = self.start_x + self.wall_ext
         y = self.start_y + self.wall_ext
         w = self.buildable_width - 2 * self.wall_ext
@@ -333,83 +556,34 @@ class ProfessionalLayoutGenerator:
         has_store = bool(self.brief.get("hasStoreRoom", False))
         has_stairs = bool(self.brief.get("hasStaircase", False) or int(self.brief.get("floors", 1) or 1) > 1)
 
-        front_left_w = min(16.0, max(10.0, w * 0.34))
-        front_right_w = max(10.0, w - front_left_w - self.wall_int)
-
+        # ── Front row: garage (fixed width) + drawing room (flexible) ──
+        front_items = []
         if has_garage:
-            self._add_room("GARAGE", "Garage", "garage", x, y, front_left_w, front_h, "#E8E8E8")
-        else:
-            self._add_room("FOYER", "Entrance Foyer", "other", x, y, front_left_w * 0.55, front_h * 0.45, "#F6F6F6")
+            front_items.append({"type": "garage", "name": "Garage", "color": "#E8E8E8",
+                                 "fixed_w": min(16.0, max(10.0, w * 0.34))})
+        front_items.append({"type": "drawing", "name": "Drawing Room", "color": "#E8F0FF"})
+        self._place_row(x, y, w, front_h, front_items)
 
-        self._add_room(
-            "DRAWING\nROOM",
-            "Drawing Room",
-            "drawing",
-            x + (front_left_w + self.wall_int if has_garage else front_left_w * 0.65),
-            y,
-            front_right_w if has_garage else w - (front_left_w * 0.65) - self.wall_int,
-            front_h,
-            "#E8F0FF",
-        )
-
+        # ── Mid row: living + dining, split evenly ──
         mid_y = y + front_h + self.wall_int
-        living_w = max(12.0, w * 0.5)
-        dining_w = max(10.0, w - living_w - self.wall_int)
-        self._add_room("LIVING", "Living Room", "living", x, mid_y, living_w, mid_h, "#E8F8E8")
-        self._add_room("DINING", "Dining Room", "dining", x + living_w + self.wall_int, mid_y, dining_w, mid_h, "#FFE8D4")
+        mid_items = [
+            {"type": "living", "name": "Living Room", "color": "#E8F8E8"},
+            {"type": "dining", "name": "Dining Room", "color": "#FFE8D4"},
+        ]
+        self._place_row(x, mid_y, w, mid_h, mid_items)
 
+        # ── Rear-of-mid row: kitchen + utility/store ──
         kitchen_y = mid_y + mid_h + self.wall_int
-        kitchen_w = max(11.0, w * 0.42)
-        utility_w = max(8.0, w - kitchen_w - self.wall_int)
-
-        self._add_room("KITCHEN", "Kitchen", "kitchen", x, kitchen_y, kitchen_w, rear_h * 0.48, "#FFF9E6")
-        self._add_room(
-            "UTILITY",
-            "Utility / Store",
-            "store" if has_store else "other",
-            x + kitchen_w + self.wall_int,
-            kitchen_y,
-            utility_w,
-            rear_h * 0.48,
-            "#F4F4F4",
-        )
+        util_items = [
+            {"type": "kitchen", "name": "Kitchen", "color": "#FFF9E6"},
+            {"type": "store" if has_store else "other", "name": "Utility / Store", "color": "#F4F4F4"},
+        ]
+        self._place_row(x, kitchen_y, w, rear_h * 0.48, util_items)
 
         bedroom_y = kitchen_y + rear_h * 0.48 + self.wall_int
         remaining_h = max(10.0, rear_h - rear_h * 0.48 - self.wall_int)
-        bed_count = max(1, self._room_count("bedroom") or 3)
-        bath_count = max(1, self._room_count("bathroom") or min(2, bed_count))
 
-        bed_h = (remaining_h - (bed_count - 1) * self.wall_int) / bed_count
-        bed_left_w = max(12.0, w * 0.62)
-        bath_w = max(6.0, w - bed_left_w - self.wall_int)
-
-        colors = ["#E0E6F0", "#D4E4F0", "#C8DDFF"]
-
-        for i in range(bed_count):
-            by = bedroom_y + i * (bed_h + self.wall_int)
-            self._add_room(
-                "MASTER\nBED" if i == 0 else f"BED {i+1}",
-                "Master Bedroom" if i == 0 else f"Bedroom {i+1}",
-                "bedroom",
-                x,
-                by,
-                bed_left_w,
-                bed_h,
-                colors[i % len(colors)],
-                "master" if i == 0 else "default",
-            )
-
-            if i < bath_count:
-                self._add_room(
-                    f"BATH {i+1}",
-                    f"Bathroom {i+1}",
-                    "bathroom",
-                    x + bed_left_w + self.wall_int,
-                    by,
-                    bath_w,
-                    bed_h,
-                    "#D4E8FF",
-                )
+        self._generate_bedroom_wing(x, bedroom_y, w, remaining_h, style="stacked")
 
         if has_stairs:
             stair_x = x + w * 0.48
@@ -419,7 +593,7 @@ class ProfessionalLayoutGenerator:
             self._add_room("STAIR", "Staircase", "staircase", stair_x, stair_y, stair_w, stair_h, "#F0F0F0")
 
     def _generate_variant_b(self):
-        """Split layout: service on left, private rooms on right"""
+        """Split layout: service on left, private rooms on right."""
         x = self.start_x + self.wall_ext
         y = self.start_y + self.wall_ext
         w = self.buildable_width - 2 * self.wall_ext
@@ -475,42 +649,11 @@ class ProfessionalLayoutGenerator:
             "#FFE8D4",
         )
 
-        bed_count = max(1, self._room_count("bedroom") or 3)
-        bath_count = max(1, self._room_count("bathroom") or min(2, bed_count))
-        bed_h = (h - (bed_count - 1) * self.wall_int) / bed_count
-        bed_main_w = max(12.0, right_w * 0.66)
-        bath_w = max(6.0, right_w - bed_main_w - self.wall_int)
-
-        colors = ["#E0E6F0", "#D4E4F0", "#C8DDFF"]
-
-        for i in range(bed_count):
-            by = y + i * (bed_h + self.wall_int)
-            self._add_room(
-                "MASTER\nBED" if i == 0 else f"BED {i+1}",
-                "Master Bedroom" if i == 0 else f"Bedroom {i+1}",
-                "bedroom",
-                x + left_w + self.wall_int,
-                by,
-                bed_main_w,
-                bed_h,
-                colors[i % len(colors)],
-                "master" if i == 0 else "default",
-            )
-
-            if i < bath_count:
-                self._add_room(
-                    f"BATH {i+1}",
-                    f"Bathroom {i+1}",
-                    "bathroom",
-                    x + left_w + self.wall_int + bed_main_w + self.wall_int,
-                    by,
-                    bath_w,
-                    bed_h,
-                    "#D4E8FF",
-                )
+        self._generate_bedroom_wing(x + left_w + self.wall_int, y, right_w, h, style="side")
 
     def _generate_variant_c(self):
-        """Open-plan layout with central family space and strong ventilation"""
+        """Open-plan layout with central family space and strong ventilation.
+        Kitchen/dining row now uses flexible width distribution."""
         x = self.start_x + self.wall_ext
         y = self.start_y + self.wall_ext
         w = self.buildable_width - 2 * self.wall_ext
@@ -536,25 +679,12 @@ class ProfessionalLayoutGenerator:
             "#E8F8E8",
         )
 
+        row_y = y + front_h + self.wall_int
+        self._add_room("KITCHEN", "Kitchen", "kitchen", x, row_y, side_w, middle_h * 0.58, "#FFF9E6")
         self._add_room(
-            "KITCHEN",
-            "Kitchen",
-            "kitchen",
-            x,
-            y + front_h + self.wall_int,
-            side_w,
-            middle_h * 0.58,
-            "#FFF9E6",
-        )
-        self._add_room(
-            "DINING",
-            "Dining Room",
-            "dining",
-            x + side_w + self.wall_int + center_w + self.wall_int,
-            y + front_h + self.wall_int,
-            side_w,
-            middle_h * 0.58,
-            "#FFE8D4",
+            "DINING", "Dining Room", "dining",
+            x + side_w + self.wall_int + center_w + self.wall_int, row_y,
+            side_w, middle_h * 0.58, "#FFE8D4",
         )
 
         if self.brief.get("hasStaircase", False) or int(self.brief.get("floors", 1) or 1) > 1:
@@ -570,39 +700,8 @@ class ProfessionalLayoutGenerator:
                 "#F0F0F0",
             )
 
-        bed_count = max(1, self._room_count("bedroom") or 3)
-        bath_count = max(1, self._room_count("bathroom") or min(2, bed_count))
-        bed_h = (rear_h - (bed_count - 1) * self.wall_int) / bed_count
-        left_bed_w = max(11.0, w * 0.46)
-        bath_w = max(6.0, w - left_bed_w - self.wall_int)
-
-        colors = ["#E0E6F0", "#D4E4F0", "#C8DDFF"]
-
-        for i in range(bed_count):
-            by = y + front_h + middle_h + 2 * self.wall_int + i * (bed_h + self.wall_int)
-            self._add_room(
-                "MASTER\nBED" if i == 0 else f"BED {i+1}",
-                "Master Bedroom" if i == 0 else f"Bedroom {i+1}",
-                "bedroom",
-                x,
-                by,
-                left_bed_w,
-                bed_h,
-                colors[i % len(colors)],
-                "master" if i == 0 else "default",
-            )
-
-            if i < bath_count:
-                self._add_room(
-                    f"BATH {i+1}",
-                    f"Bathroom {i+1}",
-                    "bathroom",
-                    x + left_bed_w + self.wall_int,
-                    by,
-                    bath_w,
-                    bed_h,
-                    "#D4E8FF",
-                )
+        rear_y = y + front_h + middle_h + 2 * self.wall_int
+        self._generate_bedroom_wing(x, rear_y, w, rear_h, style="stacked")
 
     def _generate_shell(self):
         self._add_wall(self.min_x, self.min_y, self.max_x, self.min_y, "exterior", "north", True)
@@ -642,7 +741,7 @@ class ProfessionalLayoutGenerator:
         win_count = 1
 
         for room in self.rooms:
-            if room["type"] in ["store"]:
+            if room["type"] in ["store", "corridor"]:
                 continue
 
             sides = self._room_exposed_sides(room)

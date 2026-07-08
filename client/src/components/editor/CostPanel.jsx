@@ -30,7 +30,6 @@ const glass = {
 };
 
 export default function CostPanel({ cost, layoutGenerated }) {
-  const [showItems, setShowItems] = useState(false);
 
   // ── Not generated yet ──
   if (!layoutGenerated) {
@@ -105,30 +104,6 @@ export default function CostPanel({ cost, layoutGenerated }) {
         })}
       </div>
 
-      {/* Toggle line items */}
-      <button
-        type="button"
-        onClick={() => setShowItems(!showItems)}
-        style={{ fontSize:"0.78rem",fontWeight:700,color:"#1E88E5",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"0.4rem 0",display:"flex",alignItems:"center",gap:"0.3rem" }}
-      >
-        {showItems ? "▲ Hide" : "▼ Show"} line items ({cost.items.length})
-      </button>
-
-      {showItems && (
-        <div style={{ marginTop:"0.75rem",borderTop:"1px solid rgba(0,0,0,0.06)",paddingTop:"0.75rem",display:"flex",flexDirection:"column",gap:"0.6rem",maxHeight:"260px",overflowY:"auto" }}>
-          {cost.items.map((item) => (
-            <div key={item.key} style={{ padding:"0.6rem 0.75rem",borderRadius:10,background:"rgba(255,255,255,0.6)",border:"1px solid rgba(200,215,225,0.4)" }}>
-              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"0.15rem" }}>
-                <span style={{ fontSize:"0.75rem",color:"#1a252f",fontWeight:700 }}>{item.label}</span>
-                <span style={{ fontSize:"0.75rem",fontWeight:800,color:"#1E88E5" }}>{formatPKR(item.subtotal)}</span>
-              </div>
-              <div style={{ fontSize:"0.68rem",color:"#90A4AE" }}>
-                {formatNumber(item.quantity)} {item.unit} × {formatPKR(item.rate)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Disclaimer */}
       <p style={{ marginTop:"1rem",fontSize:"0.68rem",color:"#90A4AE",lineHeight:1.6,borderTop:"1px solid rgba(0,0,0,0.06)",paddingTop:"0.75rem" }}>

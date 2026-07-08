@@ -1,9 +1,18 @@
 import { RATES } from "./materialsRates.js";
 
-const CEILING_HEIGHT = 3.0;
+// ── Unit conversion ──────────────────────────────────────────────────────────
+// All layout data comes in FEET. Rates are per m².
+// 1 sq ft = 0.0929 m²  |  1 ft = 0.3048 m
+const SQF_TO_SQM = 0.0929;
+const FT_TO_M    = 0.3048;
+
+const CEILING_HEIGHT_FT = 10;   // default floor height in feet
+const CEILING_HEIGHT_M  = CEILING_HEIGHT_FT * FT_TO_M; // = 3.048 m
+
 const WET_ROOMS = new Set(["bathroom", "kitchen"]);
 
-const wallLengthMeters = (wall) => {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const wallLengthFt = (wall) => {
   const dx = (wall?.x2 || 0) - (wall?.x1 || 0);
   const dy = (wall?.y2 || 0) - (wall?.y1 || 0);
   return Math.sqrt(dx * dx + dy * dy);
@@ -11,210 +20,138 @@ const wallLengthMeters = (wall) => {
 
 const lineItem = (key, qty) => {
   const rate = RATES[key];
-
-  if (!rate) {
-    throw new Error(`Unknown rate key: ${key}`);
-  }
-
+  if (!rate) throw new Error(`Unknown rate key: ${key}`);
   return {
     key,
-    label: rate.label,
-    unit: rate.unit,
+    label:    rate.label,
+    unit:     rate.unit,
     quantity: Number(qty.toFixed(2)),
-    rate: rate.rate,
+    rate:     rate.rate,
     subtotal: Math.round(qty * rate.rate),
     category: rate.category,
   };
 };
 
+// ── Main estimator ────────────────────────────────────────────────────────────
 export const estimateCost = (layout) => {
   try {
     if (!layout?.generated) {
-      return {
-        items: [],
-        total: 0,
-        byCategory: {},
-        generatedAt: null,
-      };
+      return { items:[], total:0, byCategory:{}, generatedAt:null };
     }
 
-    const plot = layout?.plot || {};
-    const walls = Array.isArray(layout?.walls) ? layout.walls : [];
-    const rooms = Array.isArray(layout?.rooms) ? layout.rooms : [];
-    const openings = Array.isArray(layout?.openings)
-      ? layout.openings
-      : [];
+    const plot     = layout?.plot     || {};
+    const walls    = Array.isArray(layout?.walls)    ? layout.walls    : [];
+    const rooms    = Array.isArray(layout?.rooms)    ? layout.rooms    : [];
+    const openings = Array.isArray(layout?.openings) ? layout.openings : [];
 
     const items = [];
 
-    // Support both old and new plot formats
-    const plotWidth =
-      plot.width ||
-      plot.frontWidth ||
-      plot.backWidth ||
-      0;
+    // ── Plot area (feet → m²) ──────────────────────────────────────────
+    const plotWidthFt  = plot.width || plot.frontWidth  || plot.backWidth  || 0;
+    const plotLengthFt = plot.length || plot.leftLength || plot.rightLength || 0;
+    const plotAreaSqm  = plotWidthFt * plotLengthFt * SQF_TO_SQM;
 
-    const plotLength =
-      plot.length ||
-      plot.leftLength ||
-      plot.rightLength ||
-      0;
-
-    const plotArea = plotWidth * plotLength;
-
-    if (plotArea > 0) {
-      items.push(lineItem("concreteFloor", plotArea));
-      items.push(lineItem("rccRoof", plotArea));
+    if (plotAreaSqm > 0) {
+      items.push(lineItem("concreteFloor", plotAreaSqm));
+      items.push(lineItem("rccRoof",       plotAreaSqm));
     }
 
-    // Walls
-    let exteriorLen = 0;
-    let interiorLen = 0;
+    // ── Walls (feet → m²) ────────────────────────────────────────────
+    let exteriorLenM = 0;
+    let interiorLenM = 0;
 
     walls.forEach((w) => {
-      const len = wallLengthMeters(w);
-
-      if (w.kind === "exterior") {
-        exteriorLen += len;
-      } else {
-        interiorLen += len;
-      }
+      const lenM = wallLengthFt(w) * FT_TO_M;
+      if (w.kind === "exterior") exteriorLenM += lenM;
+      else                       interiorLenM += lenM;
     });
 
-    if (exteriorLen > 0) {
-      items.push(
-        lineItem(
-          "brickWall",
-          exteriorLen * CEILING_HEIGHT
-        )
-      );
+    // If no wall data, estimate from plot perimeter
+    if (exteriorLenM === 0 && plotAreaSqm > 0) {
+      const perimFt = 2 * (plotWidthFt + plotLengthFt);
+      exteriorLenM  = perimFt * FT_TO_M;
+      // Interior walls — rough estimate: 60% of exterior length
+      interiorLenM  = exteriorLenM * 0.6;
     }
 
-    if (interiorLen > 0) {
-      items.push(
-        lineItem(
-          "brickWallInterior",
-          interiorLen * CEILING_HEIGHT
-        )
-      );
+    const ceilH = CEILING_HEIGHT_M;
+
+    if (exteriorLenM > 0) {
+      items.push(lineItem("brickWall",         exteriorLenM * ceilH));
+    }
+    if (interiorLenM > 0) {
+      items.push(lineItem("brickWallInterior", interiorLenM * ceilH));
     }
 
-    const totalWallSurface =
-      (exteriorLen + interiorLen) *
-      CEILING_HEIGHT *
-      2;
-
-    if (totalWallSurface > 0) {
-      items.push(
-        lineItem("plaster", totalWallSurface)
-      );
-
-      items.push(
-        lineItem("paint", totalWallSurface)
-      );
+    // Plaster + paint on both sides of all walls
+    const totalWallSurfaceM2 = (exteriorLenM + interiorLenM) * ceilH * 2;
+    if (totalWallSurfaceM2 > 0) {
+      items.push(lineItem("plaster", totalWallSurfaceM2));
+      items.push(lineItem("paint",   totalWallSurfaceM2));
     }
 
-    // Flooring
-    let dryFloorArea = 0;
-    let wetFloorArea = 0;
+    // ── Flooring (feet² → m²) ─────────────────────────────────────────
+    let dryFloorSqm = 0;
+    let wetFloorSqm = 0;
 
     rooms.forEach((r) => {
-      const width = r?.width || 0;
-      const height = r?.height || 0;
-
-      const area = width * height;
-
-      if (WET_ROOMS.has(r?.type)) {
-        wetFloorArea += area;
-      } else {
-        dryFloorArea += area;
-      }
+      const areaSqm = (r?.width || 0) * (r?.height || 0) * SQF_TO_SQM;
+      if (WET_ROOMS.has(r?.type)) wetFloorSqm += areaSqm;
+      else                        dryFloorSqm += areaSqm;
     });
 
-    if (dryFloorArea > 0) {
-      items.push(
-        lineItem("flooringTile", dryFloorArea)
-      );
+    // If no room data, estimate from 80% of plot area
+    if (dryFloorSqm + wetFloorSqm === 0 && plotAreaSqm > 0) {
+      dryFloorSqm = plotAreaSqm * 0.75;
+      wetFloorSqm = plotAreaSqm * 0.10;
     }
 
-    if (wetFloorArea > 0) {
-      items.push(
-        lineItem(
-          "flooringTileWet",
-          wetFloorArea
-        )
-      );
+    if (dryFloorSqm > 0) items.push(lineItem("flooringTile",    dryFloorSqm));
+    if (wetFloorSqm > 0) items.push(lineItem("flooringTileWet", wetFloorSqm));
+
+    // ── Openings (per unit) ───────────────────────────────────────────
+    let doorCount   = openings.filter(o => o?.kind === "door").length;
+    let windowCount = openings.filter(o => o?.kind === "window").length;
+
+    // If no opening data, estimate from room count
+    if (doorCount === 0 && rooms.length > 0) {
+      doorCount   = Math.max(1, rooms.length);        // ~1 door per room
+      windowCount = Math.max(2, Math.floor(rooms.length * 1.5)); // ~1.5 windows per room
     }
 
-    // Openings
-    const doorCount = openings.filter(
-      (o) => o?.kind === "door"
-    ).length;
+    if (doorCount   > 0) items.push(lineItem("door",   doorCount));
+    if (windowCount > 0) items.push(lineItem("window", windowCount));
 
-    const windowCount = openings.filter(
-      (o) => o?.kind === "window"
-    ).length;
+    // ── Fixtures ──────────────────────────────────────────────────────
+    const bathroomCount = rooms.filter(r => r?.type === "bathroom").length || 1;
+    const kitchenCount  = rooms.filter(r => r?.type === "kitchen").length  || 1;
+    const roomCount     = rooms.length || Math.max(3, Math.round(plotAreaSqm / 12));
 
-    if (doorCount > 0) {
-      items.push(lineItem("door", doorCount));
-    }
+    items.push(lineItem("fixturesBathroom",  bathroomCount));
+    items.push(lineItem("fixturesKitchen",   kitchenCount));
+    items.push(lineItem("electricalPerRoom", roomCount));
 
-    if (windowCount > 0) {
-      items.push(
-        lineItem("window", windowCount)
-      );
-    }
+    // ── Aggregate ─────────────────────────────────────────────────────
+    const byCategory = items.reduce((acc, item) => {
+      acc[item.category] = (acc[item.category] || 0) + item.subtotal;
+      return acc;
+    }, {});
 
-    // Fixtures
-    const bathroomCount = rooms.filter(
-      (r) => r?.type === "bathroom"
-    ).length;
+    const total = items.reduce((sum, item) => sum + item.subtotal, 0);
 
-    const kitchenCount = rooms.filter(
-      (r) => r?.type === "kitchen"
-    ).length;
+    // ── Sanity check: PKR 2,500–6,000 per sq ft is normal in Pakistan 2026
+    // If total is wildly off, warn in notes
+    const costPerSqft = plotAreaSqm > 0
+      ? total / (plotAreaSqm / SQF_TO_SQM)
+      : 0;
 
-    if (bathroomCount > 0) {
-      items.push(
-        lineItem(
-          "fixturesBathroom",
-          bathroomCount
-        )
-      );
-    }
-
-    if (kitchenCount > 0) {
-      items.push(
-        lineItem(
-          "fixturesKitchen",
-          kitchenCount
-        )
-      );
-    }
-
-    if (rooms.length > 0) {
-      items.push(
-        lineItem(
-          "electricalPerRoom",
-          rooms.length
-        )
-      );
-    }
-
-    const byCategory = items.reduce(
-      (acc, item) => {
-        acc[item.category] =
-          (acc[item.category] || 0) +
-          item.subtotal;
-        return acc;
-      },
-      {}
-    );
-
-    const total = items.reduce(
-      (sum, item) => sum + item.subtotal,
-      0
-    );
+    const notes = [
+      "Rates based on Pakistan 2026 market prices (Rawalpindi/Islamabad baseline).",
+      `Ceiling height assumed: ${CEILING_HEIGHT_FT} ft.`,
+      costPerSqft > 0
+        ? `Estimated Rs ${Math.round(costPerSqft).toLocaleString()} per sq ft — typical range: Rs 2,500–6,000/sqft.`
+        : "",
+    ].filter(Boolean);
 
     return {
       currency: "PKR",
@@ -222,17 +159,11 @@ export const estimateCost = (layout) => {
       byCategory,
       total,
       generatedAt: new Date().toISOString(),
-      notes: [
-        "Estimates use standard rates and may differ from actual market prices.",
-        `Based on ${CEILING_HEIGHT}m ceiling height.`,
-      ],
+      notes,
     };
-  } catch (error) {
-    console.error(
-      "Cost estimation error:",
-      error
-    );
 
+  } catch (error) {
+    console.error("Cost estimation error:", error);
     return {
       currency: "PKR",
       items: [],
