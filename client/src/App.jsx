@@ -1,44 +1,80 @@
-import { useState } from "react";
-import axios from "axios";
+// client/src/App.jsx
+import { Routes, Route } from "react-router-dom";
+import Navbar from "./components/layout/Navbar";
+import Footer from "./components/layout/Footer";
+import Landing from "./pages/Landing";
+import Register from "./pages/Register";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import ProtectedRoute from "./routes/ProtectedRoute";
+import NewProject from "./pages/NewProject";
+import Editor from "./pages/Editor";
+import ThreeDView from "./pages/ThreeDView";
+import Archie from "./pages/Archie";
 
-const API_BASE = "http://localhost:5000/api";
-
-function App() {
-  const [status, setStatus] = useState("Not checked yet");
-  const [loading, setLoading] = useState(false);
-
-  const checkServer = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${API_BASE}/health`);
-      setStatus(`✅ ${res.data.message}`);
-    } catch (err) {
-      setStatus(`❌ Server unreachable: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+// Shared shell for every non-landing page: Navbar + routed content + Footer.
+function AppShell() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center max-w-md">
-        <h1 className="text-4xl font-bold text-slate-900">BuildMate AI</h1>
-        <p className="mt-2 text-slate-600">
-          Frontend ↔ Backend connectivity test
-        </p>
-
-        <button
-          onClick={checkServer}
-          disabled={loading}
-          className="mt-6 px-5 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
-        >
-          {loading ? "Checking..." : "Check server"}
-        </button>
-
-        <p className="mt-4 text-sm text-slate-700">{status}</p>
-      </div>
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute><Dashboard /></ProtectedRoute>
+            }
+          />
+          <Route
+            path="/archie"
+            element={
+              <ProtectedRoute><Archie /></ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/new"
+            element={
+              <ProtectedRoute><NewProject /></ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:id/3d"
+            element={
+              <ProtectedRoute><ThreeDView /></ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:id"
+            element={
+              <ProtectedRoute><Editor /></ProtectedRoute>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <div className="max-w-xl mx-auto px-6 py-20 text-center">
+                <h1 className="text-3xl font-bold text-slate-900">404</h1>
+                <p className="mt-2 text-slate-600">Page not found.</p>
+              </div>
+            }
+          />
+        </Routes>
+      </main>
+      <Footer />
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <Routes>
+      {/* Landing has its own navbar/footer baked in */}
+      <Route path="/" element={<Landing />} />
+
+      {/* All other pages share the app Navbar + Footer (+ Archie once logged in) */}
+      <Route path="*" element={<AppShell />} />
+    </Routes>
+  );
+}
